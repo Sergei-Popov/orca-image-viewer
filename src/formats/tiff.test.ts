@@ -61,6 +61,20 @@ function image(s: Spec): TiffIfd {
 
 const range = (n: number, f: (i: number) => number) => Uint8Array.from({ length: n }, (_, i) => f(i))
 
+test('TIFF page names in Russian: a page named like a decoder word stays as the file has it', async () => {
+  const { imageText, stringsFor } = await import('../i18n')
+  const ru = stringsFor('ru')
+  const page = (name: string) => {
+    const ifd = image({ width: 1, height: 1, photometric: 1, strips: [Uint8Array.of(9)] })
+    ifd.entries.push({ tag: 285, text: name })
+    return ifd
+  }
+  const d = (await openDocument(tiff([page('Depth'), page('Layer 2')]), 'tif', platform)).desc
+  assert.deepEqual(d.images.map((i) => imageText(ru, i.label, i.fileText)), ['Страница 1 · Depth', 'Страница 2 · Layer 2'])
+  const axis = d.axes[0]
+  assert.deepEqual(axis.labels.map((l, i) => imageText(ru, l, axis.fileText?.[i])), ['Страница 1 · Depth', 'Страница 2 · Layer 2'])
+})
+
 test('TIFF pages: RGB strips, 16-bit grey LZW with predictor, 4-bit palette PackBits', async () => {
   // Page 1: 4×3 RGB in two strips.
   const rgb = range(36, (i) => (i * 7) & 255)

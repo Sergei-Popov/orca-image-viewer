@@ -9,7 +9,7 @@ import { undoFloatingPoint, undoHorizontal } from '../codecs/predictor'
 import { latin1, Reader, text, utf16be } from '../core/bytes'
 import { checkSize, damaged, ImageError, MAX_RASTER_BYTES, unsupportedPixels } from '../core/errors'
 import type { Decoded, ImageDesc, InfoItem, InfoSection, LayerDesc, Notice, Platform, Raster, SampleKind, Samples } from '../core/model'
-import { allocate, raster } from '../core/model'
+import { allocate, joinLabel, raster } from '../core/model'
 import { cmykToRgb, labToRgb } from '../core/pixels'
 import { count as counted } from '../core/plural'
 import { exifFromBlock } from '../meta/exif'
@@ -708,7 +708,9 @@ export async function openPsd(bytes: Uint8Array, platform: Platform): Promise<De
     let image = -1
     if (hasPixels) {
       image = images.length
-      images.push({ id: image, width: w, height: h, at: [], label: rec.name || `Layer ${rec.index + 1}`, info: [] })
+      // A layer's name is the file's text; only the stand-in for a nameless layer is translated.
+      const named = rec.name ? joinLabel([{ text: rec.name, file: true }]) : { label: `Layer ${rec.index + 1}`, fileText: [] }
+      images.push({ id: image, width: w, height: h, at: [], ...named, info: [] })
       layerImage.set(image, rec)
     }
     const id = descs.length

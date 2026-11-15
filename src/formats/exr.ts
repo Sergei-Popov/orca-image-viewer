@@ -10,7 +10,7 @@ import { latin1, Reader } from '../core/bytes'
 import { checkSize, damaged, ImageError, MAX_IMAGES, unsupportedCompression, unsupportedFeature } from '../core/errors'
 import { halfTable } from '../core/half'
 import type { Axis, Decoded, ImageDesc, InfoItem, InfoSection, Notice, Platform, Raster, SampleKind } from '../core/model'
-import { allocate, raster } from '../core/model'
+import { allocate, joinLabel, raster } from '../core/model'
 import { valueRange } from '../core/pixels'
 
 export const EXR_COMPRESSION = ['None', 'RLE', 'ZIPS', 'ZIP', 'PIZ', 'PXR24', 'B44', 'B44A', 'DWAA', 'DWAB', 'HTJ2K256', 'HTJ2K32', 'LJ2K', 'ZSTD']
@@ -353,16 +353,18 @@ export async function openExr(bytes: Uint8Array, platform: Platform): Promise<De
 
   // Shown images: every view of every part, at every level. Channel names and level counts come
   // straight from the headers, so count the images before reading or describing anything more.
-  const combos: { part: Part; view: View | null; label: string; unsupported?: string }[] = []
+  // Part names and view labels (layer prefixes, channel names) are the file's text.
+  const combos: { part: Part; view: View | null; label: string; fileText: number[]; unsupported?: string }[] = []
   for (const part of parts) {
-    const partLabel = part.name || (parts.length > 1 ? `Part ${part.index + 1}` : '')
+    const partPiece = part.name ? [{ text: part.name, file: true }] : parts.length > 1 ? [{ text: `Part ${part.index + 1}` }] : []
+    const alone = (fallback: string) => joinLabel(partPiece.length ? partPiece : [{ text: fallback }])
     if (part.kind.startsWith('deep')) {
-      combos.push({ part, view: null, label: partLabel || 'Deep image', unsupported: 'deep data' })
+      combos.push({ part, view: null, ...alone('Deep image'), unsupported: 'deep data' })
       continue
     }
     const views = viewsOf(part.channels)
-    if (!views.length) combos.push({ part, view: null, label: partLabel || 'Empty', unsupported: 'no channels' })
-    for (const view of views) combos.push({ part, view, label: partLabel ? `${partLabel} · ${view.label}` : view.label })
+    if (!views.length) combos.push({ part, view: null, ...alone('Empty'), unsupported: 'no channels' })
+    for (const view of views) combos.push({ part, view, ...joinLabel([...partPiece, { text: view.label, file: true }]) })
   }
   let imageCount = 0
   for (const c of combos) imageCount += levelTotal(c.part)
@@ -395,7 +397,7 @@ export async function openExr(bytes: Uint8Array, platform: Platform): Promise<De
   const levelLists = combos.map((c) => (c.part.kind.startsWith('deep') ? [{ lx: 0, ly: 0, width: c.part.dataWindow[2] - c.part.dataWindow[0] + 1, height: c.part.dataWindow[3] - c.part.dataWindow[1] + 1 }] : levelsOf(c.part)))
   for (const l of levelLists) maxLevels = Math.max(maxLevels, l.length)
   const axes: Axis[] = []
-  if (combos.length > 1) axes.push({ key: parts.length > 1 ? 'part' : 'layer', labels: combos.map((c) => c.label) })
+  if (combos.length > 1) axes.push({ key: parts.length > 1 ? 'part' : 'layer', labels: combos.map((c) => c.label), fileText: combos.map((c) => c.fileText) })
   if (maxLevels > 1) {
     const ripmap = parts.some((p) => p.tiles?.mode === 2)
     axes.push({ key: 'mip', labels: Array.from({ length: maxLevels }, (_, i) => (ripmap ? `${i}` : `${i}`)) })
@@ -415,6 +417,7 @@ export async function openExr(bytes: Uint8Array, platform: Platform): Promise<De
         height: level.height,
         at,
         label: `${c.label || 'Image'}${levelText}`,
+        fileText: c.label ? c.fileText : [],
         unsupported,
         info: [{ key: 'dimensions', value: `${level.width} × ${level.height}` }]
       })

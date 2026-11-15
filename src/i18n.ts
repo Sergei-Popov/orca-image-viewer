@@ -237,6 +237,7 @@ const en = {
   values: {} as Record<string, string>,
   imageLabels: {
     page: 'Page {n}',
+    part: 'Part {n}',
     pageReduced: 'Page {n} (reduced)',
     subImage: 'sub-image {n}',
     layer: 'Layer {n}',
@@ -737,6 +738,7 @@ const ru: Strings = {
   },
   imageLabels: {
     page: 'Страница {n}',
+    part: 'Часть {n}',
     pageReduced: 'Страница {n} (уменьшенная)',
     subImage: 'вложенное изображение {n}',
     layer: 'Слой {n}',
@@ -770,6 +772,9 @@ const ru: Strings = {
   },
   errorDetails: {
     'a RAW file without an embedded preview': 'RAW-файл без встроенного превью',
+    DEFLATE: 'данные DEFLATE',
+    hvcC: 'блок hvcC',
+    av1C: 'блок av1C',
     'this RAW variant': 'Этот вариант RAW',
     composite: 'Сведённое изображение',
     'HEIF item-offset construction': 'Сборка элементов HEIF по смещению',
@@ -788,8 +793,7 @@ const ru: Strings = {
     'YCbCr subsampling': 'прореживание YCbCr',
     'IFD entry count': 'число записей IFD',
     'IFD offset': 'смещение IFD',
-    'JPEG data': 'данные JPEG',
-    DEFLATE: 'DEFLATE'
+    'JPEG data': 'данные JPEG'
   },
   errorRules: [
     [/^horizontal predictor with (?<n>\d+)-bit samples$/, 'Горизонтальный предиктор для $<n>-битных отсчётов'],
@@ -839,6 +843,9 @@ const ru: Strings = {
     'layer channels': 'каналы слоя',
     'channel list': 'список каналов',
     'chunk count': 'число блоков',
+    'image count': 'число изображений',
+    hvcC: 'блок hvcC',
+    av1C: 'блок av1C',
     'data window': 'окно данных',
     'part count': 'число частей',
     'RLE data': 'данные RLE',
@@ -1033,6 +1040,7 @@ type LabelKey = keyof Strings['imageLabels']
 const LABEL_PATTERNS: [RegExp, LabelKey, ...string[]][] = [
   [/^Page (\d+) \(reduced\)$/, 'pageReduced', 'n'],
   [/^Page (\d+)$/, 'page', 'n'],
+  [/^Part (\d+)$/, 'part', 'n'],
   [/^sub-image (\d+)$/, 'subImage', 'n'],
   [/^Layer (\d+)$/, 'layer', 'n'],
   [/^Mip (\d+)$/, 'mip', 'n'],
@@ -1066,13 +1074,16 @@ const LABEL_PATTERNS: [RegExp, LabelKey, ...string[]][] = [
 
 /**
  * An image label or "cannot be shown" reason in the UI language. Only whole segments the
- * decoders generate are translated; names from the file (EXR parts, PSD layers) stay as they are.
+ * decoders generate are translated; `fileText` names the segments that are names from the file
+ * (EXR parts and channels, TIFF pages, PSD layers), which stay as they are even when one reads
+ * "Depth" or "Layer 2".
  */
-export function imageText(t: Strings, text: string): string {
+export function imageText(t: Strings, text: string, fileText?: readonly number[]): string {
   if (t === en) return text
   return text
     .split(' · ')
-    .map((segment) => {
+    .map((segment, index) => {
+      if (fileText?.includes(index)) return segment
       for (const [pattern, key, ...names] of LABEL_PATTERNS) {
         const m = pattern.exec(segment)
         if (m) return fill(t.imageLabels[key], Object.fromEntries(names.map((n, i) => [n, m[i + 1]])))

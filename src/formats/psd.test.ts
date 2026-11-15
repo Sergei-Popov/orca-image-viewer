@@ -70,6 +70,18 @@ test('PSD layers: groups, blend modes, opacity, hidden and text layers, Unicode 
   assert.equal(under[1], 0)
 })
 
+test('PSD layer names in Russian: a layer named like a decoder word stays as the file has it', async () => {
+  const { imageText, stringsFor } = await import('../i18n')
+  const ru = stringsFor('ru')
+  const layer = (name: string) => ({ name, width: 1, height: 1, channels: { 0: fill(1, 9), 1: fill(1, 9), 2: fill(1, 9) } })
+  const doc = await openDocument(psd({ width: 1, height: 1, planes: [fill(1, 9), fill(1, 9), fill(1, 9)], layers: [layer('Alpha'), layer('Layer 2'), layer('')] }), 'psd', platform)
+  assert.deepEqual(
+    doc.desc.images.map((i) => imageText(ru, i.label, i.fileText)),
+    // The composite, then the layers from the top: the nameless third one gets a stand-in name.
+    ['Итог', 'Слой 3', 'Layer 2', 'Alpha']
+  )
+})
+
 test('PSD without a saved composite: the visible layers are composited, and the viewer says so', async () => {
   const file = psd({
     width: 2,

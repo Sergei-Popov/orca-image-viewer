@@ -195,6 +195,31 @@ test('Error details in Russian: phrases, patterns and damaged parts; English as 
   }
 })
 
+test('Error details in Russian: every detail a reader puts in a damaged error has a Russian form', async () => {
+  const { errorDetail, stringsFor } = await import('../i18n')
+  const ru = stringsFor('ru')
+  // Every damaged(…) detail in src (grep "damaged(" outside the tests), with sample values for
+  // the ones built from the file.
+  const details = [
+    'av1C', 'B44 data', 'BigTIFF offset size', 'DDS data', 'DDS DX10 header', 'DDS header', 'DDS image count', 'DDS image', 'DDS size',
+    'DEFLATE', 'EXR channel list', 'EXR chunk count', 'EXR data window', 'EXR header', 'EXR image count', 'EXR image data', 'EXR image',
+    'EXR part count', 'EXR RLE data', 'EXR signature', 'HEIF derivation depth', 'HEIF grid tiles', 'HEIF idat', 'HEIF identity item',
+    'HEIF image', 'HEIF item data past the end', 'HEIF item data', 'HEIF meta box', 'HEIF primary image', 'hvcC', 'ICNS entries',
+    'ICNS entry', 'ICNS header', 'IFD entry count', 'IFD offset', 'JPEG data', 'Lab without three channels', 'PIZ bitmap',
+    'PIZ code length', 'PIZ code table', 'PIZ code', 'PIZ data length', 'PIZ data', 'PIZ run', 'PSD colour table', 'PSD header',
+    'PSD image data', 'PSD layer channels', 'PSD layer count', 'PSD layer record', 'PSD layer', 'PSD signature', 'PXR24 data',
+    'QOI signature', 'Radiance header', 'Radiance resolution', 'Radiance run', 'Radiance scanline width', 'Radiance scanline',
+    'Radiance signature', 'RGB with fewer than 3 samples', 'TGA colour map', 'TGA header', 'TIFF bits per sample', 'TIFF byte order',
+    'TIFF colour map', 'TIFF has no images', 'TIFF header', 'TIFF image data', 'TIFF image size', 'TIFF page', 'TIFF samples per pixel',
+    'TIFF strip offsets', 'TIFF tile size', 'YCbCr subsampling',
+    'ic04 data', 'EXR attribute dataWindow', 'HEIF hvcC', 'HEIF av1C', 'iloc field size 9', 'PSD version 3', 'QOI channels 5', 'size 0×0'
+  ]
+  const missing = details.filter((d) => !/[а-яё]/i.test(errorDetail(ru, d)))
+  assert.deepEqual(missing, [])
+  assert.equal(errorDetail(ru, 'DDS image count'), 'число изображений DDS')
+  assert.equal(errorDetail(ru, 'EXR image count'), 'число изображений EXR')
+})
+
 test('No HEVC decoder: a plain message naming the codec, and a hint for HEVC only', async () => {
   const { errorHint, fill, stringsFor } = await import('../i18n')
   for (const t of [stringsFor('en'), stringsFor('ru')]) {

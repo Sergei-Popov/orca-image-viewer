@@ -261,6 +261,30 @@ test('EXR damaged headers: chunk counts across parts must fit in the file', asyn
   assert.equal(fine.desc.images.length, 2)
 })
 
+test('EXR labels in Russian: part and channel names stay as the file has them, generated words are translated', async () => {
+  const { imageText, stringsFor } = await import('../i18n')
+  const ru = stringsFor('ru')
+  // Parts named "Depth" and "Layer 2", the second with one loose channel named "Alpha" and mip
+  // levels: the decoders use those words too, but here they are the file's names.
+  const doc = await openDocument(
+    await exr([part({ name: 'Depth' }), part({ name: 'Layer 2', channels: [{ name: 'Alpha' }], value: () => 0.5, tiles: { w: 16, h: 16, mipmap: true } })]),
+    'exr',
+    platform
+  )
+  const axis = doc.desc.axes.find((a) => a.key === 'part')
+  assert.ok(axis)
+  assert.deepEqual(
+    axis.labels.map((l, i) => imageText(ru, l, axis.fileText?.[i])),
+    ['Depth · RGBA', 'Layer 2 · Alpha']
+  )
+  const level = doc.desc.images.find((i) => i.label === 'Layer 2 · Alpha · level 1')
+  assert.ok(level)
+  assert.equal(imageText(ru, level.label, level.fileText), 'Layer 2 · Alpha · уровень 1')
+  // Unmarked, the same words are the decoders' own and are translated; so is a nameless "Part 2".
+  assert.equal(imageText(ru, 'Depth · Layer 2 · Alpha'), 'Глубина · Слой 2 · Альфа')
+  assert.equal(imageText(ru, 'Part 2 · Depth', [1]), 'Часть 2 · Depth')
+})
+
 test('EXR damaged headers: views × levels past the image cap are rejected before any image is described', async () => {
   const imageCount = (e: unknown) => (e as { code?: string }).code === 'damaged' && (e as { detail?: string }).detail === 'EXR image count'
   const chunkCount = (e: unknown) => (e as { code?: string }).code === 'damaged' && (e as { detail?: string }).detail === 'EXR chunk count'
