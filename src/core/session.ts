@@ -1,6 +1,7 @@
 // Picks the decoder by the file's bytes (the file type only breaks ties: TGA has no signature, and
 // RAW files are TIFFs) and opens the document.
 
+import { openExr } from '../formats/exr'
 import { isRadiance, openRadiance } from '../formats/hdr'
 import { openHeif } from '../formats/heif'
 import { openPsd } from '../formats/psd'
@@ -73,6 +74,8 @@ export async function openDocument(bytes: Uint8Array, fileType: string | undefin
       return openTiff(bytes, platform)
     case 'psd':
       return openPsd(bytes, platform)
+    case 'exr':
+      return openExr(bytes, platform)
     case 'native': {
       const n = nativeType(bytes)
       if (n) return openNative(bytes, n.mime, n.name, platform)
