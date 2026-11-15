@@ -8,7 +8,7 @@ import type { DocDesc, ImageDesc, InfoSection, LayerDesc, Raster } from '../core
 import { encodePng } from '../core/png'
 import type { Thumbnail } from '../core/protocol'
 import { append, h, svg } from '../dom'
-import { errorDetail, errorHint, fill, formatSize, imageText, infoValue, label, type Strings, valueText } from '../i18n'
+import { describeError, errorHint, fill, formatSize, imageText, infoValue, label, sectionTitle, type Strings, valueText } from '../i18n'
 import { icon, type IconName } from '../icons'
 import {
   autoTone,
@@ -50,15 +50,6 @@ function storageSet(key: string, value: string): void {
   } catch {
     // Storage can be off in a frame; the preference just does not stick.
   }
-}
-
-export function describeError(error: unknown, t: Strings): string {
-  if (error instanceof ImageError) {
-    const template = (t.errors as Record<string, string>)[error.code] ?? t.errors['decode-failed']
-    const detail = errorDetail(t, error.detail) || (error.code === 'damaged' ? '…' : '')
-    return fill(template, { detail }).replace(' ()', '').replace(' (…)', '')
-  }
-  return fill(t.errors['decode-failed'], { detail: error instanceof Error ? error.message : String(error) })
 }
 
 /** Layer kinds as shown; the values table translates them. */
@@ -596,14 +587,15 @@ export class ImageView {
 
   private section(s: InfoSection, top?: HTMLElement): HTMLElement {
     const t = this.t
-    const title = (t.sections as Record<string, string>)[s.title] ?? s.title
+    const title = sectionTitle(t, s.title)
     const dl = h('dl', { className: `iv-meta${s.raw ? ' iv-raw' : ''}` })
     const limit = 40
     const add = (items: typeof s.items) => {
       for (const item of items) {
+        // Raw sections (EXIF, XMP, EXR attributes, maker notes) show names and values as stored.
         const key = s.raw ? item.key : label(t, item.key)
         const value = s.raw
-          ? valueText(t, item.value)
+          ? item.value
           : item.key === 'fileSize' && /^\d+$/.test(item.value)
             ? formatSize(Number(item.value), this.locale, t.units)
             : infoValue(t, item.key, item.value)

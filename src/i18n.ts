@@ -1,5 +1,11 @@
 // UI strings in English and Russian; Orca's UI language picks one (`orca.locale`). Info labels
 // are looked up by key; EXIF and XMP tag names stay as their standard names in both languages.
+// Only text the decoders write is translated: names and text from the file stay as they are.
+
+import { ImageError } from './core/errors'
+
+/** A rewrite of an info value: a replacement string, or a function of the named groups. */
+export type Rule = [RegExp, string | ((groups: Record<string, string>) => string)]
 
 const en = {
   loading: 'Opening the image…',
@@ -316,7 +322,7 @@ const en = {
     compression: '{name} compression'
   },
   /** Rewrites of info values by key (units, flash modes); English values are shown as made. */
-  valueRules: {} as Record<string, [RegExp, string][]>,
+  valueRules: {} as Record<string, Rule[]>,
   /** Error details: whole phrases, then patterns, then the parts of "<format> <part>". */
   errorDetails: {} as Record<string, string>,
   errorRules: [] as [RegExp, string][],
@@ -797,13 +803,25 @@ export function fill(template: string, values: Record<string, string>): string {
   return template.replace(/\{(\w+)\}/g, (match, key: string) => values[key] ?? match)
 }
 
+/** An entry of the table itself, never an inherited one: file text can be "constructor". */
+export function own<T>(table: Record<string, T>, key: string): T | undefined {
+  return Object.hasOwn(table, key) ? table[key] : undefined
+}
+
 export function label(t: Strings, key: string): string {
-  return (t.labels as Record<string, string>)[key] ?? key
+  return own(t.labels as Record<string, string>, key) ?? key
+}
+
+export function sectionTitle(t: Strings, title: string): string {
+  return own(t.sections as Record<string, string>, title) ?? title
 }
 
 export function valueText(t: Strings, value: string): string {
-  return (t.values as Record<string, string>)[value] ?? value
+  return own(t.values as Record<string, string>, value) ?? value
 }
+
+/** Info keys whose values are text from the file (names, credits, notes): never translated. */
+const FILE_TEXT = new Set(['name', 'software', 'copyright', 'camera', 'serial', 'pageName', 'model', 'lens', 'job', 'description', 'comment', 'author', 'artist', 'iccProfile', 'imageId', 'noData', 'view'])
 
 type LabelKey = keyof Strings['imageLabels']
 
@@ -860,28 +878,41 @@ export function imageText(t: Strings, text: string): string {
     .join(' · ')
 }
 
-/** An info value in the UI language: whole known values, then the key's rewrite rules. */
-/** An error's detail in the UI language; English details are shown as made. */
 /** A second line under an error message, when there is something the user can check. */
 export function errorHint(t: Strings, code: string, detail: string): string {
   return code === 'no-video-decoder' && detail === 'HEVC' ? t.hevcHint : ''
 }
 
+/** An error's detail in the UI language; English details are shown as made. */
 export function errorDetail(t: Strings, detail: string): string {
-  const whole = t.errorDetails[detail]
+  const whole = own(t.errorDetails, detail)
   if (whole) return whole
   for (const [pattern, replacement] of t.errorRules) if (pattern.test(detail)) return detail.replace(pattern, replacement)
   const m = /^(TIFF|BigTIFF|PSD|EXR|DDS|ICNS|HEIF|TGA|QOI|Radiance|PIZ|B44|PXR24) (.+)$/.exec(detail)
-  const part = m && t.structureParts[m[2]]
+  const part = m && own(t.structureParts, m[2])
   if (m && part) return `${part} ${m[1]}`
   return detail
 }
 
+/** An error as one sentence; without a detail, the parenthesis that would hold it goes too. */
+export function describeError(error: unknown, t: Strings): string {
+  if (error instanceof ImageError) {
+    const template = own(t.errors as Record<string, string>, error.code) ?? t.errors['decode-failed']
+    const detail = errorDetail(t, error.detail)
+    return fill(detail ? template : template.replace(/\s*\([^()]*\{detail\}[^()]*\)/g, ''), { detail })
+  }
+  return fill(t.errors['decode-failed'], { detail: error instanceof Error ? error.message : String(error) })
+}
+
+/** An info value in the UI language: whole known values, then the key's rewrite rules. */
 export function infoValue(t: Strings, key: string, value: string): string {
+  if (FILE_TEXT.has(key)) return value
   const whole = valueText(t, value)
   if (whole !== value) return whole
   let out = value
-  for (const [pattern, replacement] of t.valueRules[key] ?? []) out = out.replace(pattern, replacement)
+  for (const [pattern, replacement] of own(t.valueRules, key) ?? []) {
+    out = typeof replacement === 'string' ? out.replace(pattern, replacement) : out.replace(pattern, (...args) => replacement(args[args.length - 1] as Record<string, string>))
+  }
   return out
 }
 

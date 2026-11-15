@@ -30,7 +30,10 @@ export interface SerializedError {
 
 export function serializeError(error: unknown): SerializedError {
   if (error instanceof ImageError) return { code: error.code, detail: error.detail, message: error.message }
-  if (error instanceof RangeError) return { code: 'too-large', detail: '', message: error.message }
+  // Only a failed allocation means the image is too large; a deep recursion is a decoding failure.
+  if (error instanceof RangeError && /allocation|invalid (typed )?array (buffer )?length|out of memory|table size/i.test(error.message)) {
+    return { code: 'too-large', detail: '', message: error.message }
+  }
   return { code: 'decode-failed', detail: '', message: error instanceof Error ? error.message : String(error) }
 }
 

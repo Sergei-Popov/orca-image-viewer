@@ -249,3 +249,37 @@ test('Overview: boxes stay inside the image when one side is shorter than the fa
   assert.ok(Date.now() - started < 2000, 'linear in the pixel count')
 })
 
+test('Errors: only a failed allocation is "too large", and a missing detail leaves no empty parenthesis', async () => {
+  const { serializeError } = await import('./protocol')
+  const { ImageError } = await import('./errors')
+  const { describeError, stringsFor } = await import('../i18n')
+  assert.equal(serializeError(new RangeError('Array buffer allocation failed')).code, 'too-large')
+  assert.equal(serializeError(new RangeError('Invalid typed array length: 4294967296')).code, 'too-large')
+  assert.equal(serializeError(new RangeError('Maximum call stack size exceeded')).code, 'decode-failed')
+  const en = stringsFor('en')
+  const ru = stringsFor('ru')
+  assert.equal(describeError(new ImageError('too-large'), en), 'The image is too large to decode in a tab.')
+  assert.equal(describeError(new ImageError('too-large'), ru), 'Изображение слишком большое для вкладки.')
+  assert.equal(describeError(new ImageError('too-large', '130,000'), en), 'The image is too large to decode in a tab (130,000 pixels).')
+  assert.equal(describeError(new ImageError('decode-failed'), en), 'The image data could not be decoded.')
+  assert.equal(describeError(new ImageError('damaged'), en), 'The file is damaged.')
+})
+
+test('Translations: only the tables’ own entries, and text from the file is never translated', async () => {
+  const { infoValue, label, sectionTitle, stringsFor, valueText } = await import('../i18n')
+  for (const t of [stringsFor('en'), stringsFor('ru')]) {
+    for (const word of ['constructor', 'toString', '__proto__', 'hasOwnProperty', 'valueOf']) {
+      assert.equal(valueText(t, word), word)
+      assert.equal(infoValue(t, 'description', word), word)
+      assert.equal(infoValue(t, 'colorMode', word), word)
+      assert.equal(label(t, word), word)
+      assert.equal(sectionTitle(t, word), word)
+    }
+  }
+  const ru = stringsFor('ru')
+  // A layer named like a blend mode or a layer kind keeps its name; the blend mode itself is translated.
+  assert.equal(infoValue(ru, 'name', 'Overlay'), 'Overlay')
+  assert.equal(infoValue(ru, 'name', 'Text'), 'Text')
+  assert.equal(infoValue(ru, 'artist', 'Normal'), 'Normal')
+  assert.equal(infoValue(ru, 'blend', 'Overlay'), 'Перекрытие')
+})
