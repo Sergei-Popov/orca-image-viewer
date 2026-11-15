@@ -1020,7 +1020,7 @@ export function valueText(t: Strings, value: string): string {
   return own(t.values as Record<string, string>, value) ?? value
 }
 
-/** Info keys whose values are text from the file (names, credits, notes): never translated. */
+/** Info keys whose values are text from the file (names, authors, notes): never translated. */
 const FILE_TEXT = new Set(['name', 'software', 'copyright', 'camera', 'serial', 'pageName', 'model', 'lens', 'job', 'description', 'comment', 'author', 'artist', 'iccProfile', 'imageId', 'noData', 'view'])
 
 export function isFileText(key: string): boolean {
