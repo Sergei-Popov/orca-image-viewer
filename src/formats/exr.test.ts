@@ -1,4 +1,5 @@
 import { assert, test } from 'orca/testing'
+import { lumaWeights } from '../codecs/exr-yca'
 import { halfToFloat, toHalf } from '../core/half'
 import { inflate } from '../core/inflate'
 import type { Raster } from '../core/model'
@@ -176,18 +177,40 @@ test('EXR data window offset and subsampled luminance/chroma convert to RGB', as
   const r = await doc.decode(0)
   assert.equal(r.channels, 3)
   assert.equal(r.color, 'rgb')
+  const [wr, wg, wb] = lumaWeights(null)
   for (const [x, y] of [
-    [0, 0],
-    [15, 9],
-    [7, 4]
+    [6, 2],
+    [7, 3],
+    [8, 4],
+    [9, 5]
   ]) {
-    // Chroma is stored for every other column, starting at the even absolute x = -4.
-    const ry = expectHalf((x - 4 - ((x - 4) & 1)) / 32)
+    // Chroma is stored for every other column from the even absolute x = −4; OpenEXR's filter
+    // rebuilds the columns between, so on a ramp they land halfway, not on the left sample.
+    const ry = (x - 4) / 32
     const red = (ry + 1) * 0.5
-    assert.ok(Math.abs(sample(r, x, y, 0) - red) < 1e-6, `(${x}, ${y}) red`)
-    assert.ok(Math.abs(sample(r, x, y, 2) - 0.5) < 1e-6, `(${x}, ${y}) blue`)
-    assert.ok(Math.abs(sample(r, x, y, 1) - (0.5 - red * 0.2126 - 0.5 * 0.0722) / 0.7152) < 1e-6, `(${x}, ${y}) green`)
+    assert.ok(Math.abs(sample(r, x, y, 0) - red) < 1e-3, `(${x}, ${y}) red ${sample(r, x, y, 0)} ≠ ${red}`)
+    assert.ok(Math.abs(sample(r, x, y, 2) - 0.5) < 1e-3, `(${x}, ${y}) blue`)
+    assert.ok(Math.abs(sample(r, x, y, 1) - (0.5 - red * wr - 0.5 * wb) / wg) < 1e-3, `(${x}, ${y}) green`)
   }
+})
+
+test('EXR luminance/chroma with a chromaticities attribute: G is solved with those primaries', async () => {
+  // Rec. 2020 primaries; full-resolution chroma, so only the weights matter.
+  const rec2020 = [0.708, 0.292, 0.17, 0.797, 0.131, 0.046, 0.3127, 0.329]
+  const [wr, wg, wb] = lumaWeights(rec2020)
+  assert.ok(Math.abs(wr - 0.2627) < 1e-4 && Math.abs(wg - 0.678) < 1e-4 && Math.abs(wb - 0.0593) < 1e-4, `Rec. 2020 weights ${[wr, wg, wb]}`)
+  const rec709 = lumaWeights(null)
+  assert.ok(Math.abs(rec709[0] - 0.212639) < 1e-5 && Math.abs(rec709[1] - 0.715169) < 1e-5, `Rec. 709 weights ${rec709}`)
+  const doc = await openDocument(
+    await exr({ width: 4, height: 4, channels: [{ name: 'Y' }, { name: 'RY' }, { name: 'BY' }], value: (c) => [0.5, 0.2, -0.1][c], chromaticities: rec2020 }),
+    'exr',
+    platform
+  )
+  const r = await doc.decode(0)
+  const [R, B] = [0.6, 0.45]
+  assert.ok(Math.abs(sample(r, 1, 1, 0) - R) < 1e-3)
+  assert.ok(Math.abs(sample(r, 1, 1, 2) - B) < 1e-3)
+  assert.ok(Math.abs(sample(r, 1, 1, 1) - (0.5 - R * wr - B * wb) / wg) < 1e-3, `green ${sample(r, 1, 1, 1)}`)
 })
 
 test('EXR damaged files: cut off, bad signature, unsupported compression', async () => {

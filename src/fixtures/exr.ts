@@ -30,6 +30,8 @@ export interface ExrPartSpec {
   tiles?: { w: number; h: number; mipmap?: boolean }
   /** A `chunkCount` attribute other than the real one (damaged headers). */
   chunkCount?: number
+  /** A `chromaticities` attribute: red, green, blue and white x, y. */
+  chromaticities?: number[]
 }
 
 /** zlib through Node's (and the browser's) CompressionStream. */
@@ -243,6 +245,11 @@ export async function exr(spec: ExrPartSpec | ExrPartSpec[], options: { headersO
     cl.u8(0)
     attr(w, 'channels', 'chlist', cl.done())
     attr(w, 'compression', 'compression', new Uint8Array([part.compression ?? 0]))
+    if (part.chromaticities) {
+      const v = new ByteWriter(true)
+      for (const n of part.chromaticities) v.f32(n)
+      attr(w, 'chromaticities', 'chromaticities', v.done())
+    }
     const box = new ByteWriter(true).i32(x0).i32(y0).i32(x0 + part.width - 1).i32(y0 + part.height - 1).done()
     attr(w, 'dataWindow', 'box2i', box)
     attr(w, 'displayWindow', 'box2i', box)
