@@ -32,18 +32,27 @@ export function xmpProperties(packet: string): InfoItem[] {
   for (const desc of packet.matchAll(/<rdf:Description\b([^>]*)>/g)) {
     for (const attr of desc[1].matchAll(/([\w-]+:[\w-]+)\s*=\s*"([^"]*)"/g)) add(attr[1], attr[2])
   }
-  // Elements: <dc:title><rdf:Alt><rdf:li xml:lang="x-default">Title</rdf:li></rdf:Alt></dc:title>
-  for (const el of packet.matchAll(/<([\w-]+:[\w-]+)(?:\s[^>]*)?>([\s\S]*?)<\/\1>/g)) {
-    const [, name, body] = el
-    if (name.startsWith('rdf:') || name.startsWith('x:')) continue
+  // Elements: <dc:title><rdf:Alt><rdf:li xml:lang="x-default">Title</rdf:li></rdf:Alt></dc:title>.
+  // Opening tags are scanned one by one, so properties nested in x:xmpmeta, rdf:RDF and
+  // structures are reached; a property read as a whole is skipped past.
+  const open = /<([\w-]+:[\w-]+)((?:\s[^>]*?)?)(\/?)>/g
+  for (let m = open.exec(packet); m; m = open.exec(packet)) {
+    const [, name, , selfClosing] = m
+    if (selfClosing || name.startsWith('rdf:') || name.startsWith('x:')) continue
+    const close = packet.indexOf(`</${name}>`, open.lastIndex)
+    if (close < 0) continue
+    const body = packet.slice(open.lastIndex, close)
     if (/<rdf:(Alt|Seq|Bag)\b/.test(body)) {
-      const values = Array.from(body.matchAll(/<rdf:li\b[^>]*>([\s\S]*?)<\/rdf:li>/g), (m) => m[1].trim()).filter(
+      const values = Array.from(body.matchAll(/<rdf:li\b[^>]*>([\s\S]*?)<\/rdf:li>/g), (li) => li[1].trim()).filter(
         (v) => v && !v.includes('<')
       )
       if (values.length) add(name, values.join(', '))
+      open.lastIndex = close + name.length + 3
     } else if (!body.includes('<')) {
       add(name, body)
+      open.lastIndex = close + name.length + 3
     }
+    // Otherwise a structure: its fields are read as the scan goes on.
   }
   return items
 }
