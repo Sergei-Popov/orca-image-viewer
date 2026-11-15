@@ -129,11 +129,14 @@ test('RAW (Fujifilm RAF): the JPEG carries EXIF, its own orientation and the mak
   const doc = await openDocument(w.done(), 'raf', platform)
   const d = doc.desc
   assert.equal(d.format, 'Fujifilm RAF')
-  // The browser turns a JPEG with its own orientation, so the size stays as stored.
+  // The browser turns a JPEG with its own orientation (8: a quarter turn), so the size is swapped.
   assert.deepEqual(
-    d.images.map((i) => `${i.width}×${i.height}`),
-    ['300×200']
+    d.images.map((i) => [i.width, i.height, i.label]),
+    [[200, 300, 'Largest preview · 200×300']]
   )
+  assert.equal(item(d, 'image', 'preview'), '200 × 300')
+  assert.equal(d.images[0].info.find((i) => i.key === 'dimensions')?.value, '200 × 300')
+  assert.deepEqual(d.notices, [{ code: 'raw-preview', detail: '200 × 300' }])
   assert.equal(item(d, 'makernote', 'Quality'), 'NORMAL')
   assert.equal(item(d, 'makernote', 'Internal serial number'), 'FF02TEST')
   assert.equal(item(d, 'image', 'model'), 'X-TEST')

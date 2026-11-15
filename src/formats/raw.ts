@@ -54,7 +54,10 @@ const RAW_COMPRESSION: Record<number, string> = {
 const CANON_UUID = '85c0b687820f11e08111f4ce462b6a48'
 
 /** A preview: a JPEG stream, or a small uncompressed TIFF image (NEF and DNG thumbnails). */
-type Preview = { kind: 'jpeg'; info: JpegInfo; source: string; rotate: number } | { kind: 'ifd'; tiff: Tiff; ifd: Ifd; width: number; height: number; source: string; rotate: number }
+/** `rotate` is the orientation the plugin applies; `shown`, the one the preview ends up in. */
+type Preview =
+  | { kind: 'jpeg'; info: JpegInfo; source: string; rotate: number; shown?: number }
+  | { kind: 'ifd'; tiff: Tiff; ifd: Ifd; width: number; height: number; source: string; rotate: number; shown?: number }
 
 const sizeOf = (p: Preview) => (p.kind === 'jpeg' ? { w: p.info.width, h: p.info.height } : { w: p.width, h: p.height })
 
@@ -398,6 +401,7 @@ export async function openRaw(bytes: Uint8Array, fileType: string | undefined, p
   for (const p of list) {
     const own = p.kind === 'jpeg' && p.info.exif ? (exifFromBlock(p.info.exif)?.orientation ?? 1) : 1
     p.rotate = own > 1 ? 1 : orientation
+    p.shown = own > 1 ? own : orientation
   }
 
   // Leaf MOS names the camera only in its XMP.
@@ -417,7 +421,7 @@ export async function openRaw(bytes: Uint8Array, fileType: string | undefined, p
 
   const images: ImageDesc[] = list.map((p, id) => {
     let { w, h } = sizeOf(p)
-    if (p.rotate >= 5) [w, h] = [h, w]
+    if ((p.shown ?? 1) >= 5) [w, h] = [h, w]
     const role = id === 0 ? 'Largest preview' : w * h <= 320 * 240 ? 'Thumbnail' : 'Preview'
     return {
       id,
