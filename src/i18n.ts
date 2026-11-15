@@ -202,6 +202,8 @@ const en = {
     preview: 'Preview',
     previews: 'Embedded previews',
     rawFormat: 'RAW format',
+    model: 'Model',
+    noData: 'No-data value',
     sensor: 'Sensor size',
     fileSize: 'File size',
     frames: 'Frames',
@@ -232,6 +234,39 @@ const en = {
     Opaque: 'Opaque',
     Custom: 'Custom',
     Legacy: 'Legacy'
+  },
+  imageLabels: {
+    page: 'Page {n}',
+    pageReduced: 'Page {n} (reduced)',
+    subImage: 'sub-image {n}',
+    layer: 'Layer {n}',
+    mip: 'Mip {n}',
+    slice: 'Slice {n}',
+    level: 'level {n}',
+    dark: 'Dark',
+    largestPreview: 'Largest preview',
+    preview: 'Preview',
+    thumbnail: 'Thumbnail',
+    thumbnailSize: 'Thumbnail {size}',
+    thumbnailOf: 'Thumbnail of {n} {size}',
+    primary: 'Primary image',
+    image: 'Image',
+    imageN: 'Image {n}',
+    composite: 'Composite',
+    deep: 'Deep image',
+    empty: 'Empty',
+    alpha: 'Alpha',
+    depth: 'Depth',
+    portraitMatte: 'Portrait matte',
+    gainMap: 'HDR gain map',
+    skinMatte: 'Skin matte',
+    hairMatte: 'Hair matte',
+    teethMatte: 'Teeth matte',
+    glassesMatte: 'Glasses matte',
+    skyMatte: 'Sky matte',
+    deepData: 'deep data',
+    noChannels: 'no channels',
+    compression: '{name} compression'
   },
   units: { b: 'B', kb: 'KB', mb: 'MB', gb: 'GB' }
 }
@@ -439,6 +474,8 @@ const ru: Strings = {
     preview: 'Превью',
     previews: 'Встроенные превью',
     rawFormat: 'Формат RAW',
+    model: 'Модель',
+    noData: 'Значение «нет данных»',
     sensor: 'Размер сенсора',
     fileSize: 'Размер файла',
     frames: 'Кадры',
@@ -470,6 +507,39 @@ const ru: Strings = {
     Custom: 'Особая',
     Legacy: 'Старый'
   },
+  imageLabels: {
+    page: 'Страница {n}',
+    pageReduced: 'Страница {n} (уменьшенная)',
+    subImage: 'вложенное изображение {n}',
+    layer: 'Слой {n}',
+    mip: 'MIP-уровень {n}',
+    slice: 'Срез {n}',
+    level: 'уровень {n}',
+    dark: 'Тёмный вариант',
+    largestPreview: 'Наибольшее превью',
+    preview: 'Превью',
+    thumbnail: 'Миниатюра',
+    thumbnailSize: 'Миниатюра {size}',
+    thumbnailOf: 'Миниатюра изображения {n} {size}',
+    primary: 'Основное изображение',
+    image: 'Изображение',
+    imageN: 'Изображение {n}',
+    composite: 'Итог',
+    deep: 'Глубинное изображение',
+    empty: 'Пусто',
+    alpha: 'Альфа',
+    depth: 'Глубина',
+    portraitMatte: 'Маска портрета',
+    gainMap: 'Карта усиления HDR',
+    skinMatte: 'Маска кожи',
+    hairMatte: 'Маска волос',
+    teethMatte: 'Маска зубов',
+    glassesMatte: 'Маска очков',
+    skyMatte: 'Маска неба',
+    deepData: 'глубинные данные',
+    noChannels: 'нет каналов',
+    compression: 'сжатие {name}'
+  },
   units: { b: 'Б', kb: 'КБ', mb: 'МБ', gb: 'ГБ' }
 }
 
@@ -489,6 +559,61 @@ export function label(t: Strings, key: string): string {
 
 export function valueText(t: Strings, value: string): string {
   return (t.values as Record<string, string>)[value] ?? value
+}
+
+type LabelKey = keyof Strings['imageLabels']
+
+/** What the decoders write into image labels, one `·`-separated segment at a time. */
+const LABEL_PATTERNS: [RegExp, LabelKey, ...string[]][] = [
+  [/^Page (\d+) \(reduced\)$/, 'pageReduced', 'n'],
+  [/^Page (\d+)$/, 'page', 'n'],
+  [/^sub-image (\d+)$/, 'subImage', 'n'],
+  [/^Layer (\d+)$/, 'layer', 'n'],
+  [/^Mip (\d+)$/, 'mip', 'n'],
+  [/^Slice (\d+)$/, 'slice', 'n'],
+  [/^level (\d+(?:, \d+)?)$/, 'level', 'n'],
+  [/^Dark$/, 'dark'],
+  [/^Largest preview$/, 'largestPreview'],
+  [/^Preview$/, 'preview'],
+  [/^Thumbnail$/, 'thumbnail'],
+  [/^Thumbnail (\d+×\d+)$/, 'thumbnailSize', 'size'],
+  [/^Thumbnail of (\d+) (\d+×\d+)$/, 'thumbnailOf', 'n', 'size'],
+  [/^Primary image$/, 'primary'],
+  [/^Image$/, 'image'],
+  [/^Image (\d+)$/, 'imageN', 'n'],
+  [/^Composite$/, 'composite'],
+  [/^Deep image$/, 'deep'],
+  [/^Empty$/, 'empty'],
+  [/^Alpha$/, 'alpha'],
+  [/^Depth$/, 'depth'],
+  [/^Portrait matte$/, 'portraitMatte'],
+  [/^HDR gain map$/, 'gainMap'],
+  [/^Skin matte$/, 'skinMatte'],
+  [/^Hair matte$/, 'hairMatte'],
+  [/^Teeth matte$/, 'teethMatte'],
+  [/^Glasses matte$/, 'glassesMatte'],
+  [/^Sky matte$/, 'skyMatte'],
+  [/^deep data$/, 'deepData'],
+  [/^no channels$/, 'noChannels'],
+  [/^(\S+) compression$/, 'compression', 'name']
+]
+
+/**
+ * An image label or "cannot be shown" reason in the UI language. Only whole segments the
+ * decoders generate are translated; names from the file (EXR parts, PSD layers) stay as they are.
+ */
+export function imageText(t: Strings, text: string): string {
+  if (t === en) return text
+  return text
+    .split(' · ')
+    .map((segment) => {
+      for (const [pattern, key, ...names] of LABEL_PATTERNS) {
+        const m = pattern.exec(segment)
+        if (m) return fill(t.imageLabels[key], Object.fromEntries(names.map((n, i) => [n, m[i + 1]])))
+      }
+      return segment
+    })
+    .join(' · ')
 }
 
 export function formatSize(bytes: number, locale: string, units: Strings['units']): string {

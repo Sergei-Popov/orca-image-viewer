@@ -8,7 +8,7 @@ import type { DocDesc, ImageDesc, InfoSection, LayerDesc, Raster } from '../core
 import { encodePng } from '../core/png'
 import type { Thumbnail } from '../core/protocol'
 import { append, h, svg } from '../dom'
-import { fill, formatSize, label, type Strings, valueText } from '../i18n'
+import { fill, formatSize, imageText, label, type Strings, valueText } from '../i18n'
 import { icon, type IconName } from '../icons'
 import {
   autoTone,
@@ -223,7 +223,7 @@ export class ImageView {
     if (image.unsupported && mode.kind === 'image') {
       this.raster = null
       this.viewport.clear()
-      this.showOverlay(fill(this.t.unsupportedImage, { detail: image.unsupported }), false)
+      this.showOverlay(fill(this.t.unsupportedImage, { detail: imageText(this.t, image.unsupported) }), false)
       this.updateSummary()
       this.renderInfo()
       this.buildChannels()
@@ -287,7 +287,7 @@ export class ImageView {
     desc.axes.forEach((axis, index) => {
       if (axis.labels.length < 2) return
       const select = h('select', { className: 'iv-select', 'aria-label': this.t.axes[axis.key] })
-      axis.labels.forEach((text, i) => select.append(h('option', { value: String(i) }, text)))
+      axis.labels.forEach((text, i) => select.append(h('option', { value: String(i) }, imageText(this.t, text))))
       select.dataset.axis = String(index)
       select.addEventListener('change', () => this.pickAxis(index, Number(select.value)))
       this.pickers.append(h('label', { className: 'iv-field' }, this.t.axes[axis.key], select))
@@ -563,7 +563,7 @@ export class ImageView {
     const extra: InfoSection[] = []
     const image = this.image
     if (image && image.info.length && (desc.images.length > 1 || this.mode.kind !== 'image')) {
-      extra.push({ title: 'selected', items: [{ key: 'name', value: image.label }, ...image.info] })
+      extra.push({ title: 'selected', items: [{ key: 'name', value: imageText(t, image.label) }, ...image.info] })
     }
     if (this.mode.kind === 'layer' && desc.layers) {
       const layer = desc.layers.find((l) => this.mode.kind === 'layer' && l.id === this.mode.layer)
@@ -747,7 +747,7 @@ export class ImageView {
         'button',
         { className: 'iv-item iv-noeye', type: 'button', role: 'option', 'aria-selected': String(this.image?.id === img.id) },
         img.unsupported ? h('span', { className: 'iv-thumb iv-plain' }, svg(icon('broken'))) : this.thumbBox(img.id, 'image'),
-        h('span', { className: 'iv-name' }, h('b', {}, img.label), h('small', {}, img.unsupported ?? `${img.width} × ${img.height}`))
+        h('span', { className: 'iv-name' }, h('b', {}, imageText(this.t, img.label)), h('small', {}, img.unsupported ? imageText(this.t, img.unsupported) : `${img.width} × ${img.height}`))
       )
       row.addEventListener('click', () => void this.select(img, { kind: 'image' }, this.keepViewFor(img)))
       list.append(row)

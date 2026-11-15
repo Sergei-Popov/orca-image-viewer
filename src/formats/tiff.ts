@@ -782,7 +782,7 @@ export function imageItems(tiff: Tiff, im: TiffImage): InfoItem[] {
   const icc = ifd.entries.get(T.ICC)
   if (icc) items.push(...iccItems(readIcc(tiff.raw(icc))))
   const nodata = tiff.string(ifd.entries.get(T.GDALNoData))
-  if (nodata) items.push({ key: 'No data value', value: nodata })
+  if (nodata) items.push({ key: 'noData', value: nodata })
   return items
 }
 

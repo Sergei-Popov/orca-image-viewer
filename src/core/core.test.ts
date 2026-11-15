@@ -127,3 +127,24 @@ test('Tone: auto levels, histogram, overview, inspector values', () => {
   assert.equal(formatFloat(Number.NaN), 'NaN')
   assert.deepEqual(pixelValues(hf, 1, 0), [])
 })
+
+test('Image labels in Russian: generated words translated, names from the file kept', async () => {
+  const { imageText, stringsFor } = await import('../i18n')
+  const ru = stringsFor('ru-RU')
+  const en = stringsFor('en')
+  const cases: [string, string][] = [
+    ['Page 2 · sub-image 1', 'Страница 2 · вложенное изображение 1'],
+    ['Page 3 (reduced)', 'Страница 3 (уменьшенная)'],
+    ['Layer 0 · +X · Mip 2 · 16×16', 'Слой 0 · +X · MIP-уровень 2 · 16×16'],
+    ['Dark · 16×16 · ic04', 'Тёмный вариант · 16×16 · ic04'],
+    ['Largest preview · 4608×3072', 'Наибольшее превью · 4608×3072'],
+    ['Thumbnail of 3 160×120', 'Миниатюра изображения 3 160×120'],
+    ['beauty · RGBA · level 2', 'beauty · RGBA · уровень 2'],
+    ['Background copy', 'Background copy'],
+    ['DWAA compression', 'сжатие DWAA']
+  ]
+  for (const [source, russian] of cases) {
+    assert.equal(imageText(ru, source), russian)
+    assert.equal(imageText(en, source), source)
+  }
+})
