@@ -2,7 +2,10 @@
 albedo. A small ray tracer in numpy: sun with shadows, a glowing lamp, sky light through ambient
 occlusion and one mirror bounce. Everything in it is made here.
 
-    python3 tools/demo/scene.py <out-dir> [width height]
+    python3 tools/demo/scene.py <out-dir> [width height [samples ao-samples]]
+
+samples × samples rays per pixel (default 2) and ao-samples sky-light rays per hit (default 6); the
+listing images use 4 and 16, which takes about a minute and leaves less grain.
 
 Writes scene.npz (beauty, depth, normal, albedo as float32 arrays) for the other demo scripts.
 """
@@ -234,8 +237,10 @@ def main():
     out = Path(sys.argv[1])
     width = int(sys.argv[2]) if len(sys.argv) > 2 else 1600
     height = int(sys.argv[3]) if len(sys.argv) > 3 else 1000
+    samples = int(sys.argv[4]) if len(sys.argv) > 4 else 2
+    ao_samples = int(sys.argv[5]) if len(sys.argv) > 5 else 6
     out.mkdir(parents=True, exist_ok=True)
-    beauty, depth, normal, albedo = render(width, height)
+    beauty, depth, normal, albedo = render(width, height, samples, ao_samples)
     np.savez_compressed(out / 'scene.npz', beauty=beauty, depth=depth, normal=normal, albedo=albedo)
     print(out / 'scene.npz', float(beauty.max()), float(np.median(beauty)))
 
