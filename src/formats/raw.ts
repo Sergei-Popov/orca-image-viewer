@@ -54,9 +54,12 @@ const RAW_COMPRESSION: Record<number, string> = {
 const CANON_UUID = '85c0b687820f11e08111f4ce462b6a48'
 
 /** A preview: a JPEG stream, or a small uncompressed TIFF image (NEF and DNG thumbnails). */
-/** `rotate` is the orientation the plugin applies; `shown`, the one the preview ends up in. */
+/**
+ * `rotate` is the orientation the plugin applies; `shown`, the one the preview ends up in. A JPEG
+ * with `data` was repaired into that copy, and `info` counts from the copy's start.
+ */
 type Preview =
-  | { kind: 'jpeg'; info: JpegInfo; source: string; rotate: number; shown?: number }
+  | { kind: 'jpeg'; info: JpegInfo; source: string; rotate: number; shown?: number; data?: Uint8Array }
   | { kind: 'ifd'; tiff: Tiff; ifd: Ifd; width: number; height: number; source: string; rotate: number; shown?: number }
 
 const sizeOf = (p: Preview) => (p.kind === 'jpeg' ? { w: p.info.width, h: p.info.height } : { w: p.width, h: p.height })
@@ -233,6 +236,17 @@ export async function openRaw(bytes: Uint8Array, fileType: string | undefined, p
     if (!info || !browserDecodable(info) || info.width < 16 || info.height < 16) return
     previews.set(start, { kind: 'jpeg', info, source, rotate: 1 })
   }
+  // Epson's larger preview (maker-note tag 0x280) starts with 0xEE instead of 0xFF; exiftool puts
+  // the 0xFF back when the rest of the JPEG start follows, and so does this.
+  const addEpsonPreview = (start: number, length: number) => {
+    if (start <= 0 || length < 16 || start + length > bytes.length || previews.has(start)) return
+    if (bytes[start] === 0xff || bytes[start + 1] !== 0xd8 || bytes[start + 2] !== 0xff || bytes[start + 3] !== 0xdb) return
+    const data = bytes.slice(start, start + length)
+    data[0] = 0xff
+    const info = jpegInfo(data, 0, true)
+    if (!info || !browserDecodable(info) || info.width < 16 || info.height < 16) return
+    previews.set(start, { kind: 'jpeg', info, source: 'Maker note', rotate: 1, data })
+  }
 
   if (startsWith(bytes, 'FUJIFILMCCD-RAW')) {
     // Fujifilm: a header with the offset of a JPEG that carries the EXIF.
@@ -347,6 +361,8 @@ export async function openRaw(bytes: Uint8Array, fileType: string | undefined, p
         const note = readMakerNote(tiff, summary.makerNote, summary.makerNoteAt, summary.make)
         if (note) {
           maker = makerItems(note)
+          const epson = note.vendor === 'Epson' ? note.ifd.entries.get(0x280) : undefined
+          if (epson) addEpsonPreview(note.base + epson.at, epson.count)
           // Nikon keeps a preview in its maker note (tag 0x11, offsets from the note's TIFF).
           const previewIfd = note.vendor === 'Nikon' ? note.ifd.entries.get(0x11) : undefined
           if (previewIfd) {
@@ -454,7 +470,7 @@ export async function openRaw(bytes: Uint8Array, fileType: string | undefined, p
       r = await decodeIfd(p.tiff, p.ifd, platform, { orient: false })
     } else {
       if (!platform.decodeImage) throw new ImageError('no-decoder', 'JPEG')
-      const img = await platform.decodeImage(bytes.subarray(p.info.start, p.info.end), 'image/jpeg')
+      const img = await platform.decodeImage((p.data ?? bytes).subarray(p.info.start, p.info.end), 'image/jpeg')
       r = dropAlpha(raster(img.width, img.height, 4, 'u8', img.data))
     }
     return p.rotate > 1 ? orient(r, p.rotate) : r

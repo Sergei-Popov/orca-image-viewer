@@ -20,6 +20,8 @@ const platform = {
 const item = (desc: DocDesc, section: string, key: string) => desc.info.find((s) => s.title === section)?.items.find((i) => i.key === key)?.value
 
 const ascii = (s: string) => new TextEncoder().encode(s)
+/** Where a Latin-1 string first occurs in the bytes. */
+const latin1Index = (bytes: Uint8Array, s: string) => Array.from(bytes, (b) => String.fromCharCode(b)).join('').indexOf(s)
 const concat = (...parts: Uint8Array[]) => {
   const w = new ByteWriter(false)
   for (const p of parts) w.bytes(p)
@@ -328,6 +330,29 @@ test('RAW (Epson ERF): big-endian, an RGB thumbnail, a packed 12-bit sensor, an 
   assert.equal(item(doc.desc, 'makernote', 'Tag 0x020D'), 'SS3')
   const r = await doc.decode(0)
   assert.deepEqual(Array.from(r.data.subarray(0, 3)), [200, 150, 100])
+})
+
+test('RAW (Epson ERF): the maker-note preview whose first byte is 0xEE, not 0xFF, is repaired and shown', async () => {
+  // An Epson note with tag 0x280 pointing (from the file's TIFF start) at a JPEG right after the IFD.
+  const preview = miniJpeg(640, 424)
+  preview[0] = 0xee
+  const note = new ByteWriter(false).ascii('EPSON').u8(0).u16(0x0100).u16(1).u16(0x0280).u16(7).u32(preview.length).u32(0).u32(0).bytes(preview).done()
+  const exif: TiffValue = { tag: 34665, ifd: { entries: [{ tag: 0x927c, bytes: note }] } }
+  const file = tiff([rgbThumb(160, 120, [200, 150, 100], [...camera('SEIKO EPSON CORP.', 'R-D1'), exif])], { little: false })
+  const at = latin1Index(file, 'EPSON\0')
+  new DataView(file.buffer, file.byteOffset).setUint32(at + 18, at + 26)
+  let first = -1
+  const watching = { ...platform, decodeImage: async (data: Uint8Array) => ((first = data[0]), platform.decodeImage(data)) }
+  const doc = await openDocument(file, 'erf', watching)
+  assert.deepEqual(
+    doc.desc.images.map((i) => i.label),
+    ['Largest preview · 640×424', 'Thumbnail · 160×120']
+  )
+  const r = await doc.decode(0)
+  assert.equal(first, 0xff)
+  assert.deepEqual([r.width, r.height], [640, 424])
+  // The file itself is left as it is.
+  assert.equal(file[at + 26], 0xee)
 })
 
 test('RAW (Kodak KDC): a JPEG-compressed IFD0 that points at a full-size JPEG', async () => {
