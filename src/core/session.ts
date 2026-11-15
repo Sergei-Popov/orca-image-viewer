@@ -9,6 +9,7 @@ import { openHeif } from '../formats/heif'
 import { openPsd } from '../formats/psd'
 import { isJpegXl, nativeType, openNative } from '../formats/native'
 import { isQoi, openQoi } from '../formats/qoi'
+import { openRaw } from '../formats/raw'
 import { looksLikeTga, openTga } from '../formats/tga'
 import { openTiff } from '../formats/tiff'
 import { latin1, startsWith } from './bytes'
@@ -82,6 +83,8 @@ export async function openDocument(bytes: Uint8Array, fileType: string | undefin
       return openDds(bytes)
     case 'icns':
       return openIcns(bytes, platform)
+    case 'raw':
+      return openRaw(bytes, fileType, platform)
     case 'native': {
       const n = nativeType(bytes)
       if (n) return openNative(bytes, n.mime, n.name, platform)

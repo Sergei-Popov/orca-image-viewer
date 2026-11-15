@@ -356,7 +356,7 @@ export function exifSummary(tiff: Tiff, dirs: ExifDirs, options: { imageTags: bo
   const taken = str(exif, 0x9003) || str(ifd0, 0x0132)
   if (taken) {
     const offset = str(exif, 0x9011)
-    camera.push({ key: 'taken', value: exifDate(taken) + (offset ? ` ${offset}` : '') })
+    camera.push({ key: 'taken', value: exifDate(taken) + (/^[+-]\d{2}:\d{2}$/.test(offset) ? ` ${offset}` : '') })
   }
   const serial = str(exif, 0xa431)
   if (serial) camera.push({ key: 'serial', value: serial })
