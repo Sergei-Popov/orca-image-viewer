@@ -205,3 +205,18 @@ test('No HEVC decoder: a plain message naming the codec, and a hint for HEVC onl
     assert.equal(errorHint(t, 'decode-failed', 'HEVC'), '')
   }
 })
+
+test('Thumbnails: a new version of the file drops the thumbnails of the old one', async () => {
+  const { ThumbCache } = await import('../viewer/thumbs')
+  const cache = new ThumbCache<string>()
+  cache.set(1, 0, 'red page 1')
+  cache.set(1, 1, 'green page 2')
+  assert.equal(cache.get(1, 1), 'green page 2')
+  // Orca sends the file again after an outside write: the same ids, another generation.
+  assert.equal(cache.get(2, 0), undefined)
+  assert.equal(cache.get(2, 1), undefined)
+  assert.equal(cache.size, 0)
+  cache.set(2, 0, 'yellow page 1')
+  assert.equal(cache.get(2, 0), 'yellow page 1')
+})
+

@@ -22,6 +22,7 @@ import {
   type Tone,
   type ToneMap
 } from './tone'
+import { ThumbCache } from './thumbs'
 import { Viewport } from './viewport'
 
 type SaveAs = (options: { suggestedName?: string; mimeType?: string; data: ArrayBuffer }) => Promise<{ status: 'saved' | 'cancelled' }>
@@ -181,6 +182,10 @@ export class ImageView {
   /** Opens new file bytes; earlier documents are dropped. */
   async open(bytes: ArrayBuffer, fileType: string | undefined): Promise<void> {
     const generation = ++this.generation
+    // Thumbnails of the previous version are dropped with their generation; boxes still waiting
+    // to be seen belong to the old list.
+    this.thumbObserver?.disconnect()
+    this.thumbObserver = null
     this.client?.dispose()
     const client = new DecoderClient()
     this.client = client
@@ -776,11 +781,11 @@ export class ImageView {
     else if (this.tab === 'layers') this.renderLayers()
   }
 
-  private thumbCache = new Map<number, Thumbnail | 'failed'>()
+  private readonly thumbs = new ThumbCache<Thumbnail | 'failed'>()
 
   private thumbBox(image: number, fallback: IconName): HTMLElement {
     const box = h('span', { className: 'iv-thumb' })
-    const cached = this.thumbCache.get(image)
+    const cached = this.thumbs.get(this.generation, image)
     const paint = (thumb: Thumbnail | 'failed') => {
       if (thumb === 'failed') {
         box.classList.add('iv-plain')
@@ -816,13 +821,13 @@ export class ImageView {
       client.thumbnail(image, THUMB).then(
         (thumb) => {
           if (generation !== this.generation) return
-          this.thumbCache.set(image, thumb)
+          this.thumbs.set(generation, image, thumb)
           box.classList.remove('iv-plain')
           paint(thumb)
         },
         () => {
           if (generation !== this.generation) return
-          this.thumbCache.set(image, 'failed')
+          this.thumbs.set(generation, image, 'failed')
           paint('failed')
         }
       )
