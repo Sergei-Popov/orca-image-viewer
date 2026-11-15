@@ -173,8 +173,8 @@ export function webCodecsDecoder(): VideoImageDecoder | undefined {
         for (let i = start; i < Math.min(images.length, start + batch); i++) {
           decoder.decode(new EncodedVideoChunk({ type: 'key', timestamp: i, data: images[i].data as Uint8Array<ArrayBuffer> }))
         }
-        // A system decoder that never answers (seen when the app's window is in the background)
-        // must not leave the tab spinning: give up after a quiet spell with no picture.
+        // A system decoder that never answers must not leave the tab spinning: give up after a
+        // quiet spell with no picture.
         const flushed = decoder.flush().then(
           () => 'flushed' as const,
           (e) => {
