@@ -1,0 +1,289 @@
+import { assert, test } from 'orca/testing'
+import { inflate } from '../core/inflate'
+import type { DocDesc, Raster } from '../core/model'
+import { openDocument } from '../core/session'
+import { psd } from '../fixtures/psd'
+import { ByteWriter } from '../fixtures/writer'
+
+const platform = { inflate }
+
+const item = (desc: DocDesc, section: string, key: string) => desc.info.find((s) => s.title === section)?.items.find((i) => i.key === key)?.value
+
+const codeOf = (e: unknown) => (e as { code?: string }).code
+
+const fill = (n: number, v: number) => new Uint8Array(n).fill(v)
+
+const pixel = (r: Raster, x: number, y: number) => Array.from(r.data.subarray((y * r.width + x) * r.channels, (y * r.width + x + 1) * r.channels))
+
+test('PSD layers: groups, blend modes, opacity, hidden and text layers, Unicode names, composite', async () => {
+  const n = 16
+  const file = psd({
+    width: 4,
+    height: 4,
+    planes: [fill(n, 10), fill(n, 20), fill(n, 30)],
+    realMerged: true,
+    // Bottom first, as the file stores them.
+    layers: [
+      { name: 'Фон', width: 4, height: 4, channels: { [-1]: fill(n, 255), 0: fill(n, 200), 1: fill(n, 0), 2: fill(n, 0) } },
+      { name: '</Layer group>', width: 0, height: 0, section: 3 },
+      { name: 'Shade', left: 1, top: 1, width: 2, height: 2, blend: 'mul ', opacity: 0.5, channels: { [-1]: fill(4, 255), 0: fill(4, 128), 1: fill(4, 128), 2: fill(4, 128) } },
+      { name: 'Title', width: 2, height: 1, marker: 'TySh', channels: { [-1]: fill(2, 255), 0: fill(2, 0), 1: fill(2, 0), 2: fill(2, 255) } },
+      { name: 'Group', width: 0, height: 0, section: 1 },
+      { name: 'Hidden', width: 1, height: 1, hidden: true, channels: { [-1]: fill(1, 255), 0: fill(1, 1), 1: fill(1, 2), 2: fill(1, 3) } }
+    ]
+  })
+  const doc = await openDocument(file, 'psd', platform)
+  const d = doc.desc
+  assert.equal(d.format, 'PSD')
+  const layers = d.layers ?? []
+  assert.deepEqual(
+    layers.map((l) => [l.name, l.kind, l.depth, l.visible]),
+    [
+      ['Hidden', 'pixel', 0, false],
+      ['Group', 'group', 0, true],
+      ['Title', 'text', 1, true],
+      ['Shade', 'pixel', 1, true],
+      ['Фон', 'pixel', 0, true]
+    ]
+  )
+  const shade = layers[3]
+  assert.equal(shade.blend, 'Multiply')
+  assert.equal(Math.round(shade.opacity * 100), 50)
+  assert.deepEqual([shade.left, shade.top, shade.width, shade.height], [1, 1, 2, 2])
+  assert.equal(item(d, 'image', 'layers'), '4 (1 group)')
+  assert.equal(item(d, 'image', 'compression'), 'RLE (PackBits)')
+  assert.equal(item(d, 'image', 'composite'), 'Yes')
+
+  // The saved composite.
+  const flat = await doc.decode(0)
+  assert.deepEqual(pixel(flat, 2, 2), [10, 20, 30])
+  // One layer's own pixels, with its transparency.
+  const own = await doc.decode(shade.image)
+  assert.deepEqual([own.width, own.height, own.channels], [2, 2, 4])
+  assert.deepEqual(pixel(own, 0, 0), [128, 128, 128, 255])
+  // A composite of chosen layers: the background with the half-opacity Multiply layer over it.
+  const visible = layers.map((l) => l.name === 'Фон' || l.name === 'Shade' || l.name === 'Group')
+  const mixed = await (doc.composite as NonNullable<typeof doc.composite>)(visible)
+  assert.deepEqual(pixel(mixed, 0, 0).slice(0, 3), [200, 0, 0])
+  const under = pixel(mixed, 1, 1)
+  assert.ok(Math.abs(under[0] - 150) <= 1, `multiply at half opacity: ${under}`)
+  assert.equal(under[1], 0)
+})
+
+test('PSD layer names in Russian: a layer named like a decoder word stays as the file has it', async () => {
+  const { imageText, stringsFor } = await import('../i18n')
+  const ru = stringsFor('ru')
+  const layer = (name: string) => ({ name, width: 1, height: 1, channels: { 0: fill(1, 9), 1: fill(1, 9), 2: fill(1, 9) } })
+  const doc = await openDocument(psd({ width: 1, height: 1, planes: [fill(1, 9), fill(1, 9), fill(1, 9)], layers: [layer('Alpha'), layer('Layer 2'), layer('')] }), 'psd', platform)
+  assert.deepEqual(
+    doc.desc.images.map((i) => imageText(ru, i.label, i.fileText)),
+    // The composite, then the layers from the top: the nameless third one gets a stand-in name.
+    ['Итог', 'Слой 3', 'Layer 2', 'Alpha']
+  )
+})
+
+test('PSD without a saved composite: the visible layers are composited, and the viewer says so', async () => {
+  const file = psd({
+    width: 2,
+    height: 2,
+    planes: [fill(4, 255), fill(4, 255), fill(4, 255)],
+    realMerged: false,
+    layers: [
+      { name: 'Red', width: 2, height: 2, channels: { [-1]: fill(4, 255), 0: fill(4, 255), 1: fill(4, 0), 2: fill(4, 0) } },
+      { name: 'Blue dot', left: 1, top: 0, width: 1, height: 1, channels: { [-1]: fill(1, 255), 0: fill(1, 0), 1: fill(1, 0), 2: fill(1, 255) } }
+    ]
+  })
+  const doc = await openDocument(file, 'psd', platform)
+  assert.ok(doc.desc.notices.some((x) => x.code === 'psd-no-composite'))
+  assert.equal(item(doc.desc, 'image', 'composite'), 'Not saved (composited from layers)')
+  const r = await doc.decode(0)
+  assert.deepEqual(pixel(r, 0, 0).slice(0, 3), [255, 0, 0])
+  assert.deepEqual(pixel(r, 1, 0).slice(0, 3), [0, 0, 255])
+})
+
+test('PSD depths and modes: 16-bit grey with prediction, 32-bit float, CMYK, bitmap, indexed, PSB', async () => {
+  const grey = await openDocument(psd({ width: 3, height: 1, depth: 16, mode: 1, compression: 3, planes: [Uint16Array.from([0, 1000, 65535])] }), 'psd', platform)
+  const g = await grey.decode(0)
+  assert.equal(g.kind, 'u16')
+  assert.deepEqual(Array.from(g.data), [0, 1000, 65535])
+
+  const hdr = await openDocument(
+    psd({ width: 2, height: 1, depth: 32, compression: 3, planes: [Float32Array.from([0.5, 4]), Float32Array.from([0.25, 2]), Float32Array.from([0, 1])] }),
+    'psd',
+    platform
+  )
+  const f = await hdr.decode(0)
+  assert.equal(f.kind, 'f32')
+  assert.equal(f.transfer, 'linear')
+  assert.deepEqual(Array.from(f.data), [0.5, 0.25, 0, 4, 2, 1])
+
+  // CMYK stores ink inverted: 255 is no ink.
+  const cmyk = await openDocument(psd({ width: 2, height: 1, mode: 4, compression: 0, planes: [Uint8Array.from([255, 255]), Uint8Array.from([255, 0]), Uint8Array.from([255, 0]), Uint8Array.from([255, 255])] }), 'psd', platform)
+  const c = await cmyk.decode(0)
+  assert.deepEqual(Array.from(c.data.subarray(0, 6)), [255, 255, 255, 255, 0, 0])
+
+  const bitmap = await openDocument(psd({ width: 3, height: 1, depth: 1, mode: 0, compression: 0, planes: [Uint8Array.from([0, 1, 0])] }), 'psd', platform)
+  assert.deepEqual(Array.from((await bitmap.decode(0)).data), [0, 255, 0])
+
+  const palette = new Uint8Array(768)
+  palette[1] = 250
+  palette[256 + 1] = 100
+  palette[512 + 2] = 77
+  const indexed = await openDocument(psd({ width: 2, height: 1, mode: 2, palette, planes: [Uint8Array.from([1, 2])] }), 'psd', platform)
+  assert.deepEqual(Array.from((await indexed.decode(0)).data.subarray(0, 6)), [250, 100, 0, 0, 0, 77])
+
+  const big = await openDocument(
+    psd({
+      width: 2,
+      height: 2,
+      psb: true,
+      planes: [fill(4, 1), fill(4, 2), fill(4, 3)],
+      layers: [{ name: 'Only', width: 2, height: 2, channels: { [-1]: fill(4, 255), 0: fill(4, 9), 1: fill(4, 8), 2: fill(4, 7) } }]
+    }),
+    'psb',
+    platform
+  )
+  assert.equal(big.desc.format, 'PSB')
+  assert.equal(item(big.desc, 'file', 'version'), 'PSB (large document)')
+  assert.deepEqual(pixel(await big.decode(1), 1, 1), [9, 8, 7, 255])
+})
+
+test('PSD damaged: bad signature, unsupported depth, cut-off image data', async () => {
+  await assert.rejects(
+    () => openDocument(new ByteWriter(false).ascii('8BPS').u16(7).zeros(20).done(), 'psd', platform),
+    (e: unknown) => codeOf(e) === 'damaged'
+  )
+  const odd = psd({ width: 1, height: 1, planes: [fill(1, 0), fill(1, 0), fill(1, 0)] })
+  odd[23] = 7
+  await assert.rejects(
+    () => openDocument(odd, 'psd', platform),
+    (e: unknown) => codeOf(e) === 'unsupported-pixels'
+  )
+  const full = psd({ width: 8, height: 8, compression: 0, planes: [fill(64, 50), fill(64, 60), fill(64, 70)] })
+  const doc = await openDocument(full.subarray(0, full.length - 100), 'psd', platform)
+  const r = await doc.decode(0)
+  assert.ok(r.partial)
+  assert.deepEqual(pixel(r, 0, 0), [50, 60, 0])
+
+  // Cut off inside the layers: no saved composite to show, so the readable layers are composited
+  // and the result is marked partial.
+  const red = { [-1]: fill(16, 255), 0: fill(16, 255), 1: fill(16, 0), 2: fill(16, 0) }
+  const layered = psd({
+    width: 4,
+    height: 4,
+    compression: 0,
+    planes: [fill(16, 1), fill(16, 2), fill(16, 3)],
+    realMerged: true,
+    layers: [
+      { name: 'Base', width: 4, height: 4, channels: red },
+      { name: 'Top', width: 4, height: 4, channels: { [-1]: fill(16, 255), 0: fill(16, 0), 1: fill(16, 0), 2: fill(16, 255) } }
+    ]
+  })
+  // The file ends with the composite (2 + 3 × 16 bytes) after a 4-byte global mask length: cut
+  // those and the last 8 bytes of the top layer's blue channel.
+  const cut = await openDocument(layered.subarray(0, layered.length - 50 - 4 - 8), 'psd', platform)
+  assert.equal(item(cut.desc, 'image', 'composite'), 'Missing, the file is cut off (composited from layers)')
+  const shown = await cut.decode(0)
+  assert.ok(shown.partial)
+})
+
+test('PSD details in Russian: modes, depths, compression, version and group counts translated', async () => {
+  const { englishLeft } = await import('../fixtures/russian')
+  const palette = new Uint8Array(768)
+  const files = [
+    psd({ width: 3, height: 1, depth: 16, mode: 1, compression: 3, planes: [Uint16Array.from([0, 1000, 65535])] }),
+    psd({ width: 2, height: 1, depth: 32, compression: 3, planes: [Float32Array.from([0.5, 4]), Float32Array.from([0.25, 2]), Float32Array.from([0, 1])] }),
+    psd({ width: 3, height: 1, depth: 1, mode: 0, compression: 0, planes: [Uint8Array.from([0, 1, 0])] }),
+    psd({ width: 2, height: 1, mode: 2, palette, compression: 1, planes: [Uint8Array.from([1, 2])] }),
+    psd({ width: 1, height: 1, mode: 7, compression: 2, planes: [fill(1, 1), fill(1, 2)] }),
+    psd({
+      width: 2,
+      height: 2,
+      psb: true,
+      resolution: 300,
+      planes: [fill(4, 1), fill(4, 2), fill(4, 3)],
+      layers: [
+        { name: 'Overlay', width: 2, height: 2, blend: 'over', channels: { [-1]: fill(4, 255), 0: fill(4, 9), 1: fill(4, 8), 2: fill(4, 7) } },
+        { name: '</Layer group>', width: 0, height: 0, section: 3 },
+        { name: 'Text', width: 2, height: 2, marker: 'TySh', channels: { [-1]: fill(4, 255), 0: fill(4, 1), 1: fill(4, 1), 2: fill(4, 1) } },
+        { name: 'Group', width: 0, height: 0, section: 1 }
+      ]
+    })
+  ]
+  for (const file of files) assert.deepEqual(englishLeft((await openDocument(file, 'psd', platform)).desc), [])
+})
+
+test('PSD transparency: Photoshop and GIMP flattened images over white are un-matted, sips files kept, 1006 spot channels not alpha', async () => {
+  // A red-pink pixel at 80% opacity, which Photoshop stores composited over white, and a clear one.
+  const stored = [fill(2, 255), Uint8Array.of(51, 255), Uint8Array.of(153, 255), Uint8Array.of(204, 0)]
+  const layer = { name: 'Layer 1', width: 1, height: 1, channels: { [-1]: fill(1, 204), 0: fill(1, 255), 1: fill(1, 0), 2: fill(1, 128) } }
+  const photoshop = await openDocument(
+    psd({ width: 2, height: 1, planes: stored, mergedAlpha: true, layers: [layer], alphaIds: [0], alphaNames: ['Transparency'], pascalAlphaNames: ['Transparency'] }),
+    'psd',
+    platform
+  )
+  const flat = await photoshop.decode(0)
+  assert.deepEqual(pixel(flat, 0, 0), [255, 0, 128, 204])
+  assert.equal(pixel(flat, 1, 0)[3], 0)
+  assert.equal(item(photoshop.desc, 'image', 'alpha'), undefined)
+  // Showing the layers instead gives the same colour, so nothing jumps when a layer is toggled.
+  const composite = await (photoshop.composite as NonNullable<typeof photoshop.composite>)([true])
+  const mixed = pixel(composite, 0, 0)
+  assert.ok(mixed.every((v, i) => Math.abs(v - [255, 0, 128, 204][i]) <= 1), `layer composite ${mixed}`)
+
+  // GIMP marks the channel only with the negative layer count and resource 1006, yet blends the
+  // flattened image against white too: the data shows it (no sample below 255 − alpha − 1).
+  const gimp = await openDocument(psd({ width: 2, height: 1, planes: stored, mergedAlpha: true, layers: [layer], pascalAlphaNames: ['Transparency'] }), 'psd', platform)
+  assert.deepEqual(pixel(await gimp.decode(0), 0, 0), [255, 0, 128, 204])
+
+  // macOS sips marks it the same way but stores the colour as it is: a green of 0 at 80% and a
+  // black clear pixel could not come from white, so nothing is changed.
+  const straight = [Uint8Array.of(255, 0), Uint8Array.of(0, 0), Uint8Array.of(128, 0), Uint8Array.of(204, 0)]
+  const sips = await openDocument(psd({ width: 2, height: 1, planes: straight, mergedAlpha: true, layers: [layer], pascalAlphaNames: ['Transparency'] }), 'psd', platform)
+  const kept = await sips.decode(0)
+  assert.deepEqual(pixel(kept, 0, 0), [255, 0, 128, 204])
+  assert.deepEqual(pixel(kept, 1, 0), [0, 0, 0, 0])
+  // One pale semi-transparent pixel is not enough to call straight colour matted when another
+  // pixel breaks the rule: the pale one keeps its stored value.
+  const mixed2 = await openDocument(
+    psd({ width: 2, height: 1, planes: [Uint8Array.of(250, 10), Uint8Array.of(250, 10), Uint8Array.of(250, 10), Uint8Array.of(128, 128)], mergedAlpha: true, layers: [layer], pascalAlphaNames: ['Transparency'] }),
+    'psd',
+    platform
+  )
+  assert.deepEqual(pixel(await mixed2.decode(0), 0, 0), [250, 250, 250, 128])
+
+  // A flat 32-bit Photoshop file without layers: identifier 0 marks the transparency channel.
+  const float = await openDocument(
+    psd({ width: 1, height: 1, depth: 32, planes: [Float32Array.of(0.6), Float32Array.of(1), Float32Array.of(0.5), Float32Array.of(0.5)], alphaIds: [0], alphaNames: ['Transparency'], compression: 0 }),
+    'psd',
+    platform
+  )
+  const f = await float.decode(0)
+  assert.equal(f.channels, 4)
+  assert.deepEqual(pixel(f, 0, 0).map((v) => Math.round(v * 1000) / 1000), [0.2, 1, 0, 0.5])
+  assert.equal(item(float.desc, 'image', 'alpha'), undefined)
+  // HDR colour above 1 is not clipped: straight (4, 0.25, 2) at 50%, stored over white as
+  // (2.5, 0.625, 1.5), comes back as it was, like an opaque 4.0 beside it.
+  const hdr = await openDocument(
+    psd({ width: 2, height: 1, depth: 32, planes: [Float32Array.of(2.5, 4), Float32Array.of(0.625, 4), Float32Array.of(1.5, 4), Float32Array.of(0.5, 1)], alphaIds: [0], alphaNames: ['Transparency'], compression: 0 }),
+    'psd',
+    platform
+  )
+  const h = await hdr.decode(0)
+  assert.deepEqual(pixel(h, 0, 0), [4, 0.25, 2, 0.5])
+  assert.deepEqual(pixel(h, 1, 0), [4, 4, 4, 1])
+
+  // Grey: (200 + 100 − 255) × 255 / 100 = 114.75.
+  const grey = await openDocument(psd({ width: 1, height: 1, mode: 1, planes: [fill(1, 200), fill(1, 100)], mergedAlpha: true, layers: [{ name: 'Layer 1', width: 1, height: 1, channels: { [-1]: fill(1, 100), 0: fill(1, 115) } }], alphaIds: [0], alphaNames: ['Transparency'] }), 'psd', platform)
+  assert.deepEqual(pixel(await grey.decode(0), 0, 0), [115, 100])
+
+  // CMYK with three spot channels named only in resource 1006: no transparency.
+  const spots = await openDocument(
+    psd({ width: 1, height: 1, mode: 4, planes: [fill(1, 255), fill(1, 255), fill(1, 255), fill(1, 255), fill(1, 0), fill(1, 128), fill(1, 255)], pascalAlphaNames: ['blue', 'fluorescent pink', 'yellow'] }),
+    'psd',
+    platform
+  )
+  const s = await spots.decode(0)
+  assert.equal(s.channels, 3)
+  assert.equal(item(spots.desc, 'image', 'alpha'), 'blue, fluorescent pink, yellow')
+})

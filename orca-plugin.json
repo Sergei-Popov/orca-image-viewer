@@ -1,32 +1,106 @@
 {
   "$schema": "https://raw.githubusercontent.com/stablyai/orca/main/docs/schemas/plugins/orca-plugin.v2.schema.json",
   "manifestVersion": 2,
+  "execution": "sandboxed-ui",
   "id": "image-viewer",
   "name": "Image Viewer",
   "version": "0.1.0",
-  "description": "Images Orca can't open, in its editor tabs: TIFF, HEIC, PSD, EXR, HDR, TGA, DDS, QOI, ICNS and camera RAW, with zoom, pixel values, pages and layers, metadata and Save as PNG. Offline.",
+  "description": "Image formats Orca can't show, in its editor tabs: TIFF, HEIC and HEIF, PSD and PSB, EXR, HDR, TGA, DDS, QOI, ICNS, and the embedded previews of camera RAW files. Zoom to the pixel, pages, layers and mip levels, HDR exposure, channels, EXIF, XMP and GPS details, Save as PNG. Read-only, offline.",
+  "author": {
+    "name": "Sergei Popov",
+    "url": "https://github.com/Sergei-Popov"
+  },
+  "repository": "https://github.com/Sergei-Popov/orca-image-viewer",
+  "icon": "images/icon.png",
+  "cover": {
+    "path": "images/cover.png",
+    "alt": "Image Viewer on an OpenEXR render: the Part picker, +0.5 EV exposure and Filmic tone mapping in the toolbar above the image."
+  },
+  "screenshots": [
+    {
+      "path": "images/shot-1-psd-layers.png",
+      "alt": "The Layers tab lists layers and groups with blend mode, opacity and size; the Badge smart object is shown alone at 100%."
+    },
+    {
+      "path": "images/shot-2-hdr-exposure.png",
+      "alt": "A Radiance HDR render at −2.0 EV, Filmic: the lamp keeps its shape, and the pixel readout shows its stored R 16.0625."
+    },
+    {
+      "path": "images/shot-3-raw-exif.png",
+      "alt": "A DNG's embedded preview beside its camera and location details: 1/250 s, f/8, ISO 100, 35 mm, 40° 45′ 36″ N, 113° 53′ 24″ W."
+    },
+    {
+      "path": "images/shot-4-dds-cube.png",
+      "alt": "A DDS cube map in 16-bit float: the Face and Mip pickers in the toolbar, and a Faces list of all six faces with −Z shown."
+    },
+    {
+      "path": "images/shot-5-heic.png",
+      "alt": "A HEIC photo with its details: a 4 × 2 grid of 512 × 512 tiles, codec hvc1.3.E.L90.B0, 8-bit. Shown in Orca's light theme."
+    }
+  ],
+  "license": "MIT",
   "engines": {
     "orca": ">=1.4.248"
   },
-  "execution": "sandboxed-ui",
   "pluginApi": 1,
   "contributes": {
     "customEditors": [
       {
-        "id": "image-viewer",
+        "id": "image",
         "title": "Image Viewer",
         "extensions": [
-          ".image-viewer"
+          ".tif",
+          ".tiff",
+          ".heic",
+          ".heif",
+          ".hif",
+          ".psd",
+          ".psb",
+          ".exr",
+          ".hdr",
+          ".pic",
+          ".tga",
+          ".dds",
+          ".qoi",
+          ".icns"
         ],
-        "entry": "editor/main.ts",
-        "frame": "isolated"
+        "entry": "src/editor.ts",
+        "priority": "default",
+        "contentKind": "bytes",
+        "frame": "isolated",
+        "icon": "icons/image.png"
+      },
+      {
+        "id": "raw",
+        "title": "Image Viewer",
+        "extensions": [
+          ".dng",
+          ".cr2",
+          ".cr3",
+          ".nef",
+          ".nrw",
+          ".arw",
+          ".srf",
+          ".raf",
+          ".rw2",
+          ".orf",
+          ".pef",
+          ".srw",
+          ".sr2",
+          ".ori",
+          ".rwl",
+          ".iiq",
+          ".erf",
+          ".kdc",
+          ".mos"
+        ],
+        "entry": "src/editor.ts",
+        "priority": "default",
+        "contentKind": "bytes",
+        "frame": "isolated",
+        "icon": "icons/raw.png"
       }
     ]
   },
-  "author": {
-    "name": "Сергей Попов",
-    "url": "https://github.com/Sergei-Popov"
-  },
-  "repository": "https://github.com/Sergei-Popov/orca-image-viewer",
-  "license": "MIT"
+  "capabilities": []
 }
