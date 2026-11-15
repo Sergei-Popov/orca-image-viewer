@@ -9,9 +9,9 @@ import { ImageError, unsupportedFeature } from '../core/errors'
 import type { Decoded, ImageDesc, InfoItem, InfoSection, Platform, Raster } from '../core/model'
 import { raster } from '../core/model'
 import { dropAlpha, orient } from '../core/pixels'
-import { exifDirs, exifFromBlock, exifSummary, type ExifSummary, genericValue } from '../meta/exif'
+import { type CameraExtras, cameraExtrasFromBlock, exifDirs, exifFromBlock, exifSummary, type ExifSummary, fillExtras, genericValue } from '../meta/exif'
 import { type Ifd, T, Tiff } from '../meta/ifd'
-import { xmpProperties, xmpSection } from '../meta/xmp'
+import { cameraExtrasFromXmp, xmpProperties, xmpSection } from '../meta/xmp'
 import { readBoxes } from './isobmff'
 import { browserDecodable, findJpegs, type JpegInfo, jpegInfo } from './jpeg'
 import { COMPRESSION_NAMES, decodeIfd, isImageIfd, readImage } from './tiff'
@@ -353,10 +353,25 @@ export async function openRaw(bytes: Uint8Array, fileType: string | undefined, p
       const dng = (ifd0 as Ifd).entries.get(50706)
       if (dng) formatName = `DNG ${tiff.values(dng, 4).join('.')}`
       else if (bytes[8] === 0x43 && bytes[9] === 0x52) formatName = 'Canon CR2'
-      summary = exifSummary(tiff, exifDirs(tiff, ifd0), { imageTags: false })
-      orientation = summary.orientation
       const xmpEntry = (ifd0 as Ifd).entries.get(T.XMP)
       if (xmpEntry) xmp = new TextDecoder().decode(tiff.raw(xmpEntry, 4 << 20))
+      const dirs = exifDirs(tiff, ifd0)
+      // Camera values the EXIF directories leave out. Panasonic and Leica (RW2, RWL) keep ISO in
+      // IFD0 tag 0x17, and ISO and the 35 mm focal length in the embedded JPEG's EXIF.
+      const extras: CameraExtras = {}
+      if (bytes[2] === 0x55) extras.iso = tiff.value((ifd0 as Ifd).entries.get(0x17)) || undefined
+      for (const p of [...previews.values()].sort((a, b) => sizeOf(b).w * sizeOf(b).h - sizeOf(a).w * sizeOf(a).h)) {
+        if (p.kind === 'jpeg' && p.info.exif) {
+          fillExtras(extras, cameraExtrasFromBlock(p.info.exif))
+          break
+        }
+      }
+      // Leaf MOS keeps them only in its XMP; Phase One names the lens only in its own block.
+      if (xmp) fillExtras(extras, cameraExtrasFromXmp(xmp))
+      const noteEntry = dirs.exif?.entries.get(0x927c)
+      if (noteEntry && !extras.lens) extras.lens = phaseOneLens(tiff.raw(noteEntry)) || undefined
+      summary = exifSummary(tiff, dirs, { imageTags: false, extras })
+      orientation = summary.orientation
       if (summary.makerNote) {
         const note = readMakerNote(tiff, summary.makerNote, summary.makerNoteAt, summary.make)
         if (note) {
@@ -491,6 +506,28 @@ export async function openRaw(bytes: Uint8Array, fileType: string | undefined, p
 }
 
 /** Joins the EXIF of several blocks (CR3 keeps IFD0, EXIF and GPS apart): sections by title. */
+/**
+ * The lens named in Phase One's own block, the maker note of an IIQ ("IIIICwaR", little-endian):
+ * a directory of 16-byte entries (tag, type, size, value or offset from the block), tag 0x412.
+ */
+function phaseOneLens(note: Uint8Array): string {
+  if (note.length < 16 || latin1(note.subarray(0, 8)) !== 'IIIICwaR') return ''
+  const view = new DataView(note.buffer, note.byteOffset, note.byteLength)
+  const dir = view.getUint32(8, true)
+  if (dir + 8 > note.length) return ''
+  const count = Math.min(view.getUint32(dir, true), 4096)
+  for (let i = 0; i < count; i++) {
+    const at = dir + 8 + i * 16
+    if (at + 16 > note.length) break
+    if (view.getUint32(at, true) !== 0x412) continue
+    const size = Math.min(view.getUint32(at + 8, true), 256)
+    const start = size > 4 ? view.getUint32(at + 12, true) : at + 12
+    if (start + size > note.length) return ''
+    return latin1(note.subarray(start, start + size)).replace(/\0[^]*$/, '').trim()
+  }
+  return ''
+}
+
 function mergeSummaries(parts: ExifSummary[]): ExifSummary {
   const sections: InfoSection[] = []
   for (const p of parts) {

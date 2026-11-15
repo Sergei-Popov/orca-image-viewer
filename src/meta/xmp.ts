@@ -2,6 +2,7 @@
 // plain string matching, because the decode worker has no DOMParser, and the packet as text.
 
 import type { InfoItem, InfoSection } from '../core/model'
+import type { CameraExtras } from './exif'
 
 const ENTITIES: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" }
 
@@ -157,6 +158,34 @@ function readAttributes(tag: string, from: number, out: [string, string][]): voi
     if (end < 0) return
     if (/^[\w-]+:[\w-]+$/.test(name)) out.push([name, tag.slice(i + 1, end)])
     i = end + 1
+  }
+}
+
+/** Camera values in XMP's exif:, exifEX: and aux: properties (Leaf MOS keeps them nowhere else). */
+export function cameraExtrasFromXmp(packet: string): CameraExtras {
+  const props = new Map(xmpProperties(packet).map((p) => [p.key, p.value]))
+  // "1/250", "80/1", "6.5" or the first of a list: "25".
+  const number = (key: string) => {
+    const m = /^(?<a>-?\d+(?:\.\d+)?)(?:\/(?<b>\d+(?:\.\d+)?))?$/.exec(props.get(key)?.split(',')[0].trim() ?? '')
+    if (!m?.groups) return undefined
+    const n = Number(m.groups.a) / (m.groups.b === undefined ? 1 : Number(m.groups.b))
+    return Number.isFinite(n) ? n : undefined
+  }
+  // APEX values: shutter speed Tv = −log₂ t, aperture Av = 2·log₂ N.
+  const tv = number('exif:ShutterSpeedValue')
+  const av = number('exif:ApertureValue')
+  const date = /^(?<y>\d{4})-(?<mo>\d{2})-(?<d>\d{2})T(?<h>\d{2}):(?<mi>\d{2})(?::(?<s>\d{2}))?(?:\.\d+)?(?<z>Z|[+-]\d{2}:\d{2})?$/.exec(props.get('exif:DateTimeOriginal') ?? '')
+  const g = date?.groups
+  return {
+    lens: props.get('exifEX:LensModel') || props.get('aux:Lens') || undefined,
+    exposureTime: number('exif:ExposureTime') ?? (tv === undefined ? undefined : 2 ** -tv),
+    fNumber: number('exif:FNumber') ?? (av === undefined ? undefined : 2 ** (av / 2)),
+    iso: number('exif:ISOSpeedRatings') ?? number('exifEX:PhotographicSensitivity'),
+    bias: number('exif:ExposureBiasValue'),
+    focal: number('exif:FocalLength'),
+    focal35: number('exif:FocalLengthIn35mmFilm'),
+    taken: g ? `${g.y}:${g.mo}:${g.d} ${g.h}:${g.mi}:${g.s ?? '00'}` : undefined,
+    takenOffset: g?.z === 'Z' ? '+00:00' : g?.z
   }
 }
 
