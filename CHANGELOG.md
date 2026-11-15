@@ -7,6 +7,8 @@ All notable changes to this plugin are documented here. The format follows
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-11-15
+
 ### Added
 
 - Image Viewer, the default editor for `.tif`, `.tiff`, `.psd`, `.psb`, `.exr`, `.hdr`, `.pic`,
