@@ -44,6 +44,8 @@ export interface PsdSpec {
   icc?: Uint8Array
   xmp?: string
   resolution?: number
+  /** The writer named in resource 1057. */
+  writer?: string
 }
 
 const bytesOf = (depth: number) => (depth === 32 ? 4 : depth === 16 ? 2 : 1)
@@ -121,7 +123,7 @@ export function psd(spec: PsdSpec): Uint8Array {
     resource(res, 1005, new ByteWriter(false).u32(fixed).u16(1).u16(1).u32(fixed).u16(1).u16(1).done())
   }
   if (spec.realMerged !== undefined) {
-    const writer = 'Test writer'
+    const writer = spec.writer ?? 'Test writer'
     const v = new ByteWriter(false).u32(1).u8(spec.realMerged ? 1 : 0).u32(writer.length)
     for (const ch of writer) v.u16(ch.charCodeAt(0))
     v.u32(0).u32(1)

@@ -60,6 +60,9 @@ export function describeError(error: unknown, t: Strings): string {
   return fill(t.errors['decode-failed'], { detail: error instanceof Error ? error.message : String(error) })
 }
 
+/** Layer kinds as shown; the values table translates them. */
+const LAYER_KINDS: Record<LayerDesc['kind'], string> = { pixel: 'Pixels', group: 'Group', text: 'Text', adjustment: 'Adjustment', smart: 'Smart object', fill: 'Fill', empty: 'Empty' }
+
 type Mode = { kind: 'image' } | { kind: 'layers' } | { kind: 'layer'; layer: number }
 
 export class ImageView {
@@ -450,9 +453,11 @@ export class ImageView {
     }
     const parts = [`${image.width.toLocaleString(this.locale)} × ${image.height.toLocaleString(this.locale)}`]
     if (r) {
-      const kind = r.kind === 'f16' ? '16-bit float' : r.kind === 'f32' ? (r.bits === 32 ? '32-bit float' : `${r.bits}-bit`) : `${r.bits}-bit`
+      const t = this.t
+      const float = r.kind === 'f16' || (r.kind === 'f32' && r.bits === 32)
+      const kind = fill(float ? t.bitsFloat : t.bitsInt, { n: String(r.kind === 'f16' ? 16 : r.bits) })
       const names = r.names.slice(0, r.channels).join('')
-      parts.push(kind, names.length <= 5 ? names : `${r.channels} ch`)
+      parts.push(kind, names.length <= 5 ? names : fill(t.channelCount, { n: String(r.channels) }))
     }
     this.summary.textContent = parts.join(' · ')
   }
@@ -619,7 +624,7 @@ export class ImageView {
   private layerItems(layer: LayerDesc): { key: string; value: string }[] {
     const items = [
       { key: 'name', value: layer.name },
-      { key: 'kind', value: layer.kind },
+      { key: 'kind', value: LAYER_KINDS[layer.kind] },
       { key: 'blend', value: layer.blend },
       { key: 'opacity', value: `${Math.round(layer.opacity * 100)}%` }
     ]
@@ -688,7 +693,8 @@ export class ImageView {
       const eye = h('span', { className: 'iv-eye', role: 'checkbox', 'aria-checked': String(on), title: t.showLayer, 'aria-pressed': String(on) }, svg(icon(on ? 'eye' : 'eyeOff')))
       const kindIcon: IconName = layer.kind === 'group' ? 'folder' : layer.kind === 'text' ? 'text' : layer.kind === 'adjustment' || layer.kind === 'fill' ? 'adjust' : 'image'
       const thumb = layer.image >= 0 ? this.thumbBox(layer.image, kindIcon) : h('span', { className: 'iv-thumb iv-plain' }, svg(icon(kindIcon)))
-      const meta = layer.kind === 'group' ? t.group : layer.image >= 0 ? `${valueText(t, layer.blend)} · ${Math.round(layer.opacity * 100)}% · ${layer.width}×${layer.height}` : t.noPixels
+      const tagged = layer.kind === 'text' || layer.kind === 'smart' || layer.kind === 'adjustment' || layer.kind === 'fill' ? `${valueText(t, LAYER_KINDS[layer.kind])} · ` : ''
+      const meta = layer.kind === 'group' ? t.group : layer.image >= 0 ? `${tagged}${valueText(t, layer.blend)} · ${Math.round(layer.opacity * 100)}% · ${layer.width}×${layer.height}` : t.noPixels
       const row = h(
         'button',
         {

@@ -353,7 +353,8 @@ export function exifSummary(tiff: Tiff, dirs: ExifDirs, options: { imageTags: bo
   if (focal) camera.push({ key: 'focalLength', value: `${trimNum(focal, 1)} mm${focal35 && focal35 !== Math.round(focal) ? ` (35 mm equivalent: ${focal35} mm)` : ''}` })
   const flash = num(exif, 0x9209)
   if (flash !== undefined) camera.push({ key: 'flash', value: flashText(flash) })
-  const taken = str(exif, 0x9003) || str(ifd0, 0x0132)
+  // DateTime (0x0132) is when the file was changed; it stands in only for a camera's photo.
+  const taken = str(exif, 0x9003) || (camera.length ? str(ifd0, 0x0132) : '')
   if (taken) {
     const offset = str(exif, 0x9011)
     camera.push({ key: 'taken', value: exifDate(taken) + (/^[+-]\d{2}:\d{2}$/.test(offset) ? ` ${offset}` : '') })

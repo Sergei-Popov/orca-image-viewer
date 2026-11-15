@@ -50,7 +50,7 @@ test('PSD layers: groups, blend modes, opacity, hidden and text layers, Unicode 
   assert.equal(shade.blend, 'Multiply')
   assert.equal(Math.round(shade.opacity * 100), 50)
   assert.deepEqual([shade.left, shade.top, shade.width, shade.height], [1, 1, 2, 2])
-  assert.equal(item(d, 'image', 'layers'), '4 (1 groups)')
+  assert.equal(item(d, 'image', 'layers'), '4 (1 group)')
   assert.equal(item(d, 'image', 'compression'), 'RLE (PackBits)')
   assert.equal(item(d, 'image', 'composite'), 'Yes')
 

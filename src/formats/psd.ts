@@ -940,7 +940,11 @@ export async function openPsd(bytes: Uint8Array, platform: Platform): Promise<De
     const names = resources.alphaNames.filter(Boolean)
     imageItems.push({ key: 'alpha', value: names.length ? names.join(', ') : String(extraChannels) })
   }
-  if (descs.length) imageItems.push({ key: 'layers', value: String(descs.filter((l) => l.kind !== 'group').length) + (descs.some((l) => l.kind === 'group') ? ` (${descs.filter((l) => l.kind === 'group').length} groups)` : '') })
+  if (descs.length) {
+    const groups = descs.filter((l) => l.kind === 'group').length
+    const groupText = groups ? ` (${groups} ${groups === 1 ? 'group' : 'groups'})` : ''
+    imageItems.push({ key: 'layers', value: String(descs.length - groups) + groupText })
+  }
   if (hasImageData) {
     const compression = (bytes[imageDataAt] << 8) | bytes[imageDataAt + 1]
     imageItems.push({ key: 'compression', value: ['Raw', 'RLE (PackBits)', 'ZIP', 'ZIP with prediction'][compression] ?? String(compression) })

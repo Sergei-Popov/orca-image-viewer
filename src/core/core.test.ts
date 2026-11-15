@@ -160,6 +160,10 @@ test('Info values in Russian: units, flash modes and compass points; English as 
     ['latitude', '47° 57′ 30.63″ N', '47° 57′ 30.63″ с. ш.'],
     ['altitude', '602.4 m', '602.4 м'],
     ['compression', 'None', 'Нет'],
+    ['layers', '11 (2 groups)', '11 (групп: 2)'],
+    ['printSize', '11.11 × 6.94 in', '11.11 × 6.94 дюйм.'],
+    ['resolution', '300 dpi', '300 пикс./дюйм'],
+    ['subfile', 'reduced resolution', 'уменьшенное разрешение'],
     ['colorSpace', 'BT.709 primaries, sRGB transfer, BT.601 matrix, full range', 'основные цвета BT.709, передаточная функция sRGB, матрица BT.601, полный диапазон'],
     ['camera', 'Test Camera', 'Test Camera']
   ]
