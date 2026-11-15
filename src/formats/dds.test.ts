@@ -172,3 +172,17 @@ test('DDS details in Russian: header kind, alpha mode and legacy formats transla
   ]
   for (const file of files) assert.deepEqual(englishLeft((await open(file)).desc), [])
 })
+
+test('DDS side list: cube faces or array layers at the chosen mip level, mip levels otherwise', async () => {
+  const rgba = (w: number, h: number, mips: number, surfaces: number) => {
+    let n = 0
+    for (let l = 0; l < mips; l++) n += Math.max(1, w >> l) * Math.max(1, h >> l)
+    return new Uint8Array(n * 4 * surfaces)
+  }
+  const cube = await open(dds({ width: 4, height: 4, mips: 3, dxgi: 28, cube: true, data: rgba(4, 4, 3, 6) }))
+  assert.equal(cube.desc.list, 'face')
+  const array = await open(dds({ width: 4, height: 4, mips: 3, dxgi: 28, arraySize: 4, data: rgba(4, 4, 3, 4) }))
+  assert.equal(array.desc.list, 'layer')
+  const mipped = await open(dds({ width: 4, height: 4, mips: 3, dxgi: 28, data: rgba(4, 4, 3, 1) }))
+  assert.equal(mipped.desc.list, 'mip')
+})

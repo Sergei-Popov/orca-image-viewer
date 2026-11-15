@@ -40,7 +40,7 @@ const en = {
     'cmyk-converted': 'CMYK shown as RGB with a simple conversion, without the colour profile.',
     'lab-converted': 'CIELAB converted to sRGB.',
     'ycc-converted': 'YCbCr converted to RGB.',
-    'exr-multipart': 'A multi-part file: pick a part in the toolbar.',
+    'exr-multipart': 'A multi-part file: pick a part in the toolbar or in the Parts list.',
     'unsupported-images': 'Some images in this file cannot be decoded: {detail}.'
   },
   axes: {
@@ -329,7 +329,7 @@ const ru: Strings = {
     'cmyk-converted': 'CMYK показан как RGB простым пересчётом, без цветового профиля.',
     'lab-converted': 'CIELAB пересчитан в sRGB.',
     'ycc-converted': 'YCbCr пересчитан в RGB.',
-    'exr-multipart': 'Файл из нескольких частей: выберите часть на панели.',
+    'exr-multipart': 'Файл из нескольких частей: выберите часть на панели инструментов или в списке «Части».',
     'unsupported-images': 'Некоторые изображения в файле не декодируются: {detail}.'
   },
   axes: {

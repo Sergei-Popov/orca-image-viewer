@@ -545,6 +545,8 @@ export class ImageView {
     if (key === 'size') return this.t.labels.sizes
     if (key === 'mip') return this.t.labels.mipmaps
     if (key === 'face') return this.t.labels.faces
+    if (key === 'part') return this.t.labels.parts
+    if (key === 'layer') return this.t.labels.layers
     return this.t.tabs.list
   }
 

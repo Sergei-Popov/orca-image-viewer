@@ -599,7 +599,8 @@ export function openDds(bytes: Uint8Array): Decoded {
       images,
       axes,
       primary: 0,
-      list: mips > 1 ? 'mip' : cube ? 'face' : arraySize > 1 ? 'layer' : undefined,
+      // Faces or array layers in the side pane (at the chosen mip level), else the mip levels.
+      list: cube ? 'face' : arraySize > 1 ? 'layer' : mips > 1 ? 'mip' : undefined,
       info: [
         { title: 'image', items: imageItems },
         { title: 'file', items: fileItems }

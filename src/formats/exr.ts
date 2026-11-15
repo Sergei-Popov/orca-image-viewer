@@ -594,7 +594,8 @@ export async function openExr(bytes: Uint8Array, platform: Platform): Promise<De
       images,
       axes,
       primary: Math.max(0, images.findIndex((i) => !i.unsupported)),
-      list: undefined,
+      // Parts or layers with thumbnails in the side pane (at the chosen level), else the levels.
+      list: axes[0]?.key,
       info: sections,
       notices
     },

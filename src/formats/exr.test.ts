@@ -222,3 +222,14 @@ test('EXR details in Russian: channel types, tiles, line order and attributes tr
   ]
   for (const file of files) assert.deepEqual(englishLeft((await openDocument(file, 'exr', platform)).desc, ['id']), [])
 })
+
+test('EXR side list: parts, or layers of one part, at the chosen level; levels of a single image', async () => {
+  const multipart = await openDocument(await exr([part({ name: 'beauty' }), part({ name: 'aovs' })]), 'exr', platform)
+  assert.equal(multipart.desc.list, 'part')
+  const layers = await openDocument(await exr({ width: 2, height: 2, channels: [{ name: 'R' }, { name: 'G' }, { name: 'B' }, { name: 'spec.R' }, { name: 'spec.G' }, { name: 'spec.B' }], value: () => 0.5 }), 'exr', platform)
+  assert.equal(layers.desc.list, 'layer')
+  const mip = await openDocument(await exr(part({ compression: 3, tiles: { w: 16, h: 8, mipmap: true } })), 'exr', platform)
+  assert.equal(mip.desc.list, 'mip')
+  const single = await openDocument(await exr(part()), 'exr', platform)
+  assert.equal(single.desc.list, undefined)
+})
