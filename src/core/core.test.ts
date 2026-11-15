@@ -172,3 +172,24 @@ test('Info values in Russian: units, flash modes and compass points; English as 
     assert.equal(infoValue(en, key, english), english)
   }
 })
+
+test('Error details in Russian: phrases, patterns and damaged parts; English as made', async () => {
+  const { errorDetail, stringsFor } = await import('../i18n')
+  const ru = stringsFor('ru')
+  const en = stringsFor('en')
+  const cases: [string, string][] = [
+    ['a RAW file without an embedded preview', 'RAW-файл без встроенного превью'],
+    ['12-bit CMYK', '12-битный CMYK'],
+    ['HEVC: the system decoder gave no picture for 20 s', 'HEVC: системный декодер не выдал изображение за 20 с'],
+    ['TIFF header', 'заголовок TIFF'],
+    ['EXR image data', 'данные изображения EXR'],
+    ['BigTIFF offset size', 'размер смещений BigTIFF'],
+    ['ic04 data', 'данные ic04'],
+    ['JPEG XL', 'JPEG XL'],
+    ['PIZ code table', 'таблица кодов PIZ']
+  ]
+  for (const [detail, russian] of cases) {
+    assert.equal(errorDetail(ru, detail), russian)
+    assert.equal(errorDetail(en, detail), detail)
+  }
+})

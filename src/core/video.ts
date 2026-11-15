@@ -129,6 +129,9 @@ async function frameToBytes(frame: VideoFrame, color: VideoColor, plane: 'rgba' 
   return luma
 }
 
+/** How long the system decoder may stay silent before the decode gives up. */
+const STALL_MS = 20_000
+
 export function webCodecsDecoder(): VideoImageDecoder | undefined {
   if (typeof VideoDecoder === 'undefined' || typeof EncodedVideoChunk === 'undefined') return undefined
   return {
@@ -141,6 +144,7 @@ export function webCodecsDecoder(): VideoImageDecoder | undefined {
       }
     },
     async decode(codec, description, images: readonly CodedImage[], color, plane) {
+      const family = codec.startsWith('av01') ? 'AV1' : 'HEVC'
       const out: Uint8Array[] = new Array(images.length)
       // Small batches: hardware decoders hold only a few frames until they are closed.
       const batch = 6
@@ -169,16 +173,38 @@ export function webCodecsDecoder(): VideoImageDecoder | undefined {
         for (let i = start; i < Math.min(images.length, start + batch); i++) {
           decoder.decode(new EncodedVideoChunk({ type: 'key', timestamp: i, data: images[i].data as Uint8Array<ArrayBuffer> }))
         }
-        try {
-          await decoder.flush()
-        } catch (e) {
-          failure ??= e
+        // A system decoder that never answers (seen when the app's window is in the background)
+        // must not leave the tab spinning: give up after a quiet spell with no picture.
+        const flushed = decoder.flush().then(
+          () => 'flushed' as const,
+          (e) => {
+            failure ??= e
+            return 'failed' as const
+          }
+        )
+        let outputs = pending.length
+        let quietSince = Date.now()
+        const stalled = new Promise<'stalled'>((resolve) => {
+          const timer = setInterval(() => {
+            if (pending.length !== outputs) {
+              outputs = pending.length
+              quietSince = Date.now()
+            } else if (Date.now() - quietSince > STALL_MS) {
+              clearInterval(timer)
+              resolve('stalled')
+            }
+          }, 500)
+          flushed.finally(() => clearInterval(timer))
+        })
+        if ((await Promise.race([flushed, stalled])) === 'stalled') {
+          if (decoder.state !== 'closed') decoder.close()
+          throw new ImageError('decode-failed', `${family}: the system decoder gave no picture for ${STALL_MS / 1000} s`)
         }
         await Promise.all(pending)
         if (decoder.state !== 'closed') decoder.close()
-        if (failure) throw new ImageError('decode-failed', `HEVC: ${failure instanceof Error ? failure.message : String(failure)}`)
+        if (failure) throw new ImageError('decode-failed', `${family}: ${failure instanceof Error ? failure.message : String(failure)}`)
       }
-      for (let i = 0; i < out.length; i++) if (!out[i]) throw new ImageError('decode-failed', `HEVC tile ${i + 1}`)
+      for (let i = 0; i < out.length; i++) if (!out[i]) throw new ImageError('decode-failed', `${family} tile ${i + 1}`)
       return out
     }
   }

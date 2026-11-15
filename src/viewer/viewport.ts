@@ -205,7 +205,7 @@ export class Viewport {
   private paintOverview(): void {
     const o = this.over
     if (!o || !this.tone) return
-    const ctx = o.canvas.getContext('2d')
+    const ctx = o.canvas.getContext('2d', { willReadFrequently: true })
     if (!ctx) return
     const img = ctx.createImageData(o.raster.width, o.raster.height)
     renderRegion(o.raster, this.tone, 0, 0, o.raster.width, o.raster.height, img.data)
@@ -215,7 +215,7 @@ export class Viewport {
   /** The overview canvas as it is drawn now, for histograms. */
   overviewPixels(): ImageData | null {
     const o = this.over
-    const ctx = o?.canvas.getContext('2d')
+    const ctx = o?.canvas.getContext('2d', { willReadFrequently: true })
     return o && ctx ? ctx.getImageData(0, 0, o.raster.width, o.raster.height) : null
   }
 

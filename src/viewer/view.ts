@@ -8,7 +8,7 @@ import type { DocDesc, ImageDesc, InfoSection, LayerDesc, Raster } from '../core
 import { encodePng } from '../core/png'
 import type { Thumbnail } from '../core/protocol'
 import { append, h, svg } from '../dom'
-import { fill, formatSize, imageText, infoValue, label, type Strings, valueText } from '../i18n'
+import { errorDetail, fill, formatSize, imageText, infoValue, label, type Strings, valueText } from '../i18n'
 import { icon, type IconName } from '../icons'
 import {
   autoTone,
@@ -54,7 +54,7 @@ function storageSet(key: string, value: string): void {
 export function describeError(error: unknown, t: Strings): string {
   if (error instanceof ImageError) {
     const template = (t.errors as Record<string, string>)[error.code] ?? t.errors['decode-failed']
-    const detail = error.detail || (error.code === 'damaged' ? '…' : '')
+    const detail = errorDetail(t, error.detail) || (error.code === 'damaged' ? '…' : '')
     return fill(template, { detail }).replace(' ()', '').replace(' (…)', '')
   }
   return fill(t.errors['decode-failed'], { detail: error instanceof Error ? error.message : String(error) })

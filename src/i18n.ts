@@ -311,6 +311,10 @@ const en = {
   },
   /** Rewrites of info values by key (units, flash modes); English values are shown as made. */
   valueRules: {} as Record<string, [RegExp, string][]>,
+  /** Error details: whole phrases, then patterns, then the parts of "<format> <part>". */
+  errorDetails: {} as Record<string, string>,
+  errorRules: [] as [RegExp, string][],
+  structureParts: {} as Record<string, string>,
   units: { b: 'B', kb: 'KB', mb: 'MB', gb: 'GB' }
 }
 
@@ -623,6 +627,100 @@ const ru: Strings = {
     noChannels: 'нет каналов',
     compression: 'сжатие {name}'
   },
+  errorDetails: {
+    'a RAW file without an embedded preview': 'RAW-файл без встроенного превью',
+    'this RAW variant': 'Этот вариант RAW',
+    composite: 'Сведённое изображение',
+    'HEIF item-offset construction': 'Сборка элементов HEIF по смещению',
+    'planar JPEG': 'Планарный JPEG',
+    'floating-point predictor on integers': 'Предиктор для чисел с плавающей точкой на целых отсчётах',
+    'complex samples': 'комплексные отсчёты',
+    'floating-point CMYK': 'CMYK с плавающей точкой',
+    'subsampled YCbCr other than 8-bit chunky': 'прореженный YCbCr, кроме 8-битного чередующегося',
+    'colour filter array (sensor data)': 'мозаика цветных фильтров (данные сенсора)',
+    'deep data': 'глубокие данные',
+    'no channels': 'нет каналов',
+    preview: 'превью',
+    canvas: 'холста',
+    'Lab without three channels': 'Lab без трёх каналов',
+    'RGB with fewer than 3 samples': 'RGB меньше чем с тремя отсчётами',
+    'YCbCr subsampling': 'прореживание YCbCr',
+    'IFD entry count': 'число записей IFD',
+    'IFD offset': 'смещение IFD',
+    'JPEG data': 'данные JPEG',
+    DEFLATE: 'DEFLATE'
+  },
+  errorRules: [
+    [/^horizontal predictor with (?<n>\d+)-bit samples$/, 'Горизонтальный предиктор для $<n>-битных отсчётов'],
+    [/^OpenEXR version (?<n>\d+)$/, 'OpenEXR версии $<n>'],
+    [/^(?<n>\d+)-bit (?<what>CMYK|L\*a\*b\*|YCbCr|PSD|JPEG)$/, '$<n>-битный $<what>'],
+    [/^(?<n>\d+)-bit palette$/, '$<n>-битная палитра'],
+    [/^(?<n>\d+)-bit colour-mapped$/, '$<n>-битный с палитрой'],
+    [/^(?<n>\d+)-bit greyscale$/, '$<n>-битный серый'],
+    [/^(?<n>\d+)-bit floating point$/, '$<n>-битные числа с плавающей точкой'],
+    [/^(?<n>\d+)-bit integers$/, '$<n>-битные целые'],
+    [/^(?<n>\d+)-ink separation$/, 'цветоделение на $<n> красок'],
+    [/^mixed bit depths \((?<v>.+)\)$/, 'разная разрядность каналов ($<v>)'],
+    [/^(?<m>.+) colour mode$/, 'цветовой режим $<m>'],
+    [/^(?<c>HEVC|AV1): the system decoder gave no picture for (?<s>\d+) s$/, '$<c>: системный декодер не выдал изображение за $<s> с'],
+    [/^(?<c>HEVC|AV1) tile (?<n>\d+)$/, '$<c>, плитка $<n>'],
+    [/^PSD compression (?<n>\d+)$/, 'PSD, способ $<n>'],
+    [/^PSD version (?<n>\d+)$/, 'версия PSD $<n>'],
+    [/^QOI channels (?<n>\d+)$/, 'число каналов QOI: $<n>'],
+    [/^iloc field size (?<n>\d+)$/, 'размер поля iloc: $<n>'],
+    [/^size (?<v>.+)$/, 'размер $<v>'],
+    [/^EXR attribute (?<v>.+)$/, 'атрибут EXR $<v>'],
+    // ICNS entries by their four-letter type.
+    [/^(?<v>[\w ]{4}) data$/, 'данные $<v>']
+  ],
+  structureParts: {
+    header: 'заголовок',
+    'DX10 header': 'заголовок DX10',
+    signature: 'сигнатура',
+    data: 'данные',
+    'image data': 'данные изображения',
+    image: 'изображение',
+    size: 'размер',
+    page: 'страница',
+    'has no images': 'без изображений',
+    'image size': 'размер изображения',
+    'tile size': 'размер плитки',
+    'strip offsets': 'смещения полос',
+    'bits per sample': 'бит на отсчёт',
+    'samples per pixel': 'отсчётов на пиксель',
+    'byte order': 'порядок байтов',
+    'offset size': 'размер смещений',
+    'colour map': 'палитра',
+    'colour table': 'палитра',
+    layer: 'слой',
+    'layer record': 'запись слоя',
+    'layer count': 'число слоёв',
+    'layer channels': 'каналы слоя',
+    'channel list': 'список каналов',
+    'chunk count': 'число блоков',
+    'data window': 'окно данных',
+    'part count': 'число частей',
+    'RLE data': 'данные RLE',
+    scanline: 'строка',
+    'scanline width': 'ширина строки',
+    run: 'серия',
+    resolution: 'разрешение',
+    entries: 'записи',
+    entry: 'запись',
+    'grid tiles': 'плитки сетки',
+    'meta box': 'блок meta',
+    'primary image': 'основное изображение',
+    'item data': 'данные элемента',
+    'item data past the end': 'данные элемента за концом файла',
+    'derivation depth': 'глубина производных изображений',
+    'identity item': 'элемент iden',
+    idat: 'блок idat',
+    bitmap: 'битовая карта',
+    code: 'код',
+    'code table': 'таблица кодов',
+    'code length': 'длина кода',
+    'data length': 'длина данных'
+  },
   valueRules: {
     exposure: [[/(?<n>\d) s\b/, '$<n> с']],
     focalLength: [
@@ -752,6 +850,17 @@ export function imageText(t: Strings, text: string): string {
 }
 
 /** An info value in the UI language: whole known values, then the key's rewrite rules. */
+/** An error's detail in the UI language; English details are shown as made. */
+export function errorDetail(t: Strings, detail: string): string {
+  const whole = t.errorDetails[detail]
+  if (whole) return whole
+  for (const [pattern, replacement] of t.errorRules) if (pattern.test(detail)) return detail.replace(pattern, replacement)
+  const m = /^(TIFF|BigTIFF|PSD|EXR|DDS|ICNS|HEIF|TGA|QOI|Radiance|PIZ|B44|PXR24) (.+)$/.exec(detail)
+  const part = m && t.structureParts[m[2]]
+  if (m && part) return `${part} ${m[1]}`
+  return detail
+}
+
 export function infoValue(t: Strings, key: string, value: string): string {
   const whole = valueText(t, value)
   if (whole !== value) return whole
