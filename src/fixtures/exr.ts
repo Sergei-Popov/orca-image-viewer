@@ -1,4 +1,5 @@
-// An OpenEXR writer for tests: single- or multi-part, scanline or tiled (one level or mipmap),
+// An OpenEXR writer for tests: single- or multi-part, scanline or tiled (one level or mipmap;
+// ripmap headers only),
 // half/float/uint channels with x/y subsampling, NONE, RLE, ZIPS, ZIP and PXR24 compression, and
 // B44A for images whose 4×4 blocks are each one value.
 
@@ -27,7 +28,7 @@ export interface ExrPartSpec {
   /** The value of a channel (index into `channels`) at absolute x, y on a mip level. */
   value: (channel: number, x: number, y: number, level: number) => number
   compression?: 0 | 1 | 2 | 3 | 5 | 7
-  tiles?: { w: number; h: number; mipmap?: boolean }
+  tiles?: { w: number; h: number; mipmap?: boolean; ripmap?: boolean }
   /** A `chunkCount` attribute other than the real one (damaged headers). */
   chunkCount?: number
   /** A `chromaticities` attribute: red, green, blue and white x, y. */
@@ -192,7 +193,7 @@ function levelSizes(part: ExrPartSpec): { w: number; h: number }[] {
   return out
 }
 
-/** `headersOnly` stops after the headers, before the offset tables and chunks. */
+/** `headersOnly` writes the headers alone: no offset tables and no chunks are made. */
 export async function exr(spec: ExrPartSpec | ExrPartSpec[], options: { headersOnly?: boolean } = {}): Promise<Uint8Array> {
   const parts = Array.isArray(spec) ? spec : [spec]
   const multipart = parts.length > 1
@@ -207,7 +208,9 @@ export async function exr(spec: ExrPartSpec | ExrPartSpec[], options: { headersO
     const x0 = part.x0 ?? 0
     const y0 = part.y0 ?? 0
     const list: { head: Uint8Array; data: Uint8Array }[] = []
-    if (part.tiles) {
+    if (options.headersOnly) {
+      // Nothing to encode.
+    } else if (part.tiles) {
       const t = part.tiles
       for (const [level, size] of levelSizes(part).entries()) {
         for (let ty = 0; ty * t.h < size.h; ty++) {
@@ -257,7 +260,7 @@ export async function exr(spec: ExrPartSpec | ExrPartSpec[], options: { headersO
     attr(w, 'pixelAspectRatio', 'float', new ByteWriter(true).f32(1).done())
     attr(w, 'screenWindowCenter', 'v2f', new ByteWriter(true).f32(0).f32(0).done())
     attr(w, 'screenWindowWidth', 'float', new ByteWriter(true).f32(1).done())
-    if (part.tiles) attr(w, 'tiles', 'tiledesc', new ByteWriter(true).u32(part.tiles.w).u32(part.tiles.h).u8(part.tiles.mipmap ? 1 : 0).done())
+    if (part.tiles) attr(w, 'tiles', 'tiledesc', new ByteWriter(true).u32(part.tiles.w).u32(part.tiles.h).u8(part.tiles.ripmap ? 2 : part.tiles.mipmap ? 1 : 0).done())
     if (multipart) {
       attr(w, 'name', 'string', new TextEncoder().encode(part.name ?? `part${pi}`))
       attr(w, 'type', 'string', new TextEncoder().encode(part.tiles ? 'tiledimage' : 'scanlineimage'))

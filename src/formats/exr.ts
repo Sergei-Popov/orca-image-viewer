@@ -7,7 +7,7 @@ import { b44Decode, type BlockChannel, exrRleDecode, exrUnpredict, pxr24Decode }
 import { lumaWeights, ycaToRgb } from '../codecs/exr-yca'
 import { pizDecode } from '../codecs/exr-piz'
 import { latin1, Reader } from '../core/bytes'
-import { checkSize, damaged, ImageError, unsupportedCompression, unsupportedFeature } from '../core/errors'
+import { checkSize, damaged, ImageError, MAX_IMAGES, unsupportedCompression, unsupportedFeature } from '../core/errors'
 import { halfTable } from '../core/half'
 import type { Axis, Decoded, ImageDesc, InfoItem, InfoSection, Notice, Platform, Raster, SampleKind } from '../core/model'
 import { allocate, raster } from '../core/model'
@@ -206,6 +206,15 @@ function levelsOf(part: Part): Level[] {
   return out
 }
 
+/** How many levels a part has, counted without listing them. */
+function levelTotal(part: Part): number {
+  const [x0, y0, x1, y1] = part.dataWindow
+  const t = part.tiles
+  if (!t || t.mode === 0 || part.kind.startsWith('deep')) return 1
+  if (t.mode === 1) return levelCount(Math.max(x1 - x0 + 1, y1 - y0 + 1), t.roundUp)
+  return levelCount(x1 - x0 + 1, t.roundUp) * levelCount(y1 - y0 + 1, t.roundUp)
+}
+
 function chunkCountOf(part: Part): number {
   const [, y0, , y1] = part.dataWindow
   const t = part.tiles
@@ -342,6 +351,23 @@ export async function openExr(bytes: Uint8Array, platform: Platform): Promise<De
   }
   if (!parts.length) throw damaged('EXR header')
 
+  // Shown images: every view of every part, at every level. Channel names and level counts come
+  // straight from the headers, so count the images before reading or describing anything more.
+  const combos: { part: Part; view: View | null; label: string; unsupported?: string }[] = []
+  for (const part of parts) {
+    const partLabel = part.name || (parts.length > 1 ? `Part ${part.index + 1}` : '')
+    if (part.kind.startsWith('deep')) {
+      combos.push({ part, view: null, label: partLabel || 'Deep image', unsupported: 'deep data' })
+      continue
+    }
+    const views = viewsOf(part.channels)
+    if (!views.length) combos.push({ part, view: null, label: partLabel || 'Empty', unsupported: 'no channels' })
+    for (const view of views) combos.push({ part, view, label: partLabel ? `${partLabel} · ${view.label}` : view.label })
+  }
+  let imageCount = 0
+  for (const c of combos) imageCount += levelTotal(c.part)
+  if (imageCount > MAX_IMAGES) throw damaged('EXR image count')
+
   // Offset tables, one per part, all before the first chunk: their total length must fit in the
   // file (chunkCount comes from the header, and a damaged one must not allocate millions of zeros).
   const counts = parts.map((part) => part.chunkCount || chunkCountOf(part))
@@ -357,23 +383,11 @@ export async function openExr(bytes: Uint8Array, platform: Platform): Promise<De
   const notices: Notice[] = []
   if (parts.length > 1) notices.push({ code: 'exr-multipart', detail: String(parts.length) })
 
-  // Shown images: every view of every part, at every level.
   interface Entry {
     part: Part
     view: View | null
     level: Level
     unsupported?: string
-  }
-  const combos: { part: Part; view: View | null; label: string; unsupported?: string }[] = []
-  for (const part of parts) {
-    const partLabel = part.name || (parts.length > 1 ? `Part ${part.index + 1}` : '')
-    if (part.kind.startsWith('deep')) {
-      combos.push({ part, view: null, label: partLabel || 'Deep image', unsupported: 'deep data' })
-      continue
-    }
-    const views = viewsOf(part.channels)
-    if (!views.length) combos.push({ part, view: null, label: partLabel || 'Empty', unsupported: 'no channels' })
-    for (const view of views) combos.push({ part, view, label: partLabel ? `${partLabel} · ${view.label}` : view.label })
   }
   const entries: Entry[] = []
   const images: ImageDesc[] = []

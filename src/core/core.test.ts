@@ -221,6 +221,30 @@ test('Thumbnails: a new version of the file drops the thumbnails of the old one'
   assert.equal(cache.get(2, 0), 'yellow page 1')
 })
 
+test('Side list: one row per position on the list axis, where the current image stands, in one pass', async () => {
+  const { listEntries } = await import('../viewer/list')
+  // 4 parts × 3 levels: the list axis is the part (0), the level (1) follows the current image.
+  const images = Array.from({ length: 12 }, (_, id) => ({ id, width: 1, height: 1, at: [Math.floor(id / 3), id % 3], label: `${id}`, info: [] }))
+  assert.deepEqual(listEntries(images, 0, null).map((i) => i.id), [0, 3, 6, 9])
+  assert.deepEqual(listEntries(images, 0, images[5]).map((i) => i.id), [2, 5, 8, 11])
+  assert.deepEqual(listEntries(images, 1, images[7]).map((i) => i.id), [6, 7, 8])
+  assert.deepEqual(listEntries(images, -1, images[7]).length, 12)
+  // Positions of different lengths are not on one axis: nothing to list.
+  assert.deepEqual(listEntries([...images, { id: 12, width: 1, height: 1, at: [4], label: '12', info: [] }], 0, null), [])
+
+  // 8192 images (1024 layers × 8 mips) read each image's position a few times, not 8192 times:
+  // the old filter compared every image with every other one on each click.
+  let reads = 0
+  const many = Array.from({ length: 8192 }, (_, id) => {
+    const at = [Math.floor(id / 8), id % 8]
+    return { id, width: 1, height: 1, label: '', info: [], get at() { reads++; return at } }
+  })
+  const rows = listEntries(many, 0, many[8191 - 4])
+  assert.equal(rows.length, 1024)
+  assert.ok(rows.every((r) => r.at[1] === 3))
+  assert.ok(reads < 8192 * 8, `${reads} reads of image positions`)
+})
+
 test('Tone controls: 8-bit images get levels, Auto contrast and reset; exposure only past 8-bit display values', () => {
   const u8 = raster(2, 1, 3, 'u8', new Uint8Array(6))
   assert.deepEqual(toneControls(u8), { exposure: false, curve: false, auto: 'contrast' })

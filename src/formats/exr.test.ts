@@ -261,6 +261,23 @@ test('EXR damaged headers: chunk counts across parts must fit in the file', asyn
   assert.equal(fine.desc.images.length, 2)
 })
 
+test('EXR damaged headers: views × levels past the image cap are rejected before any image is described', async () => {
+  const imageCount = (e: unknown) => (e as { code?: string }).code === 'damaged' && (e as { detail?: string }).detail === 'EXR image count'
+  const chunkCount = (e: unknown) => (e as { code?: string }).code === 'damaged' && (e as { detail?: string }).detail === 'EXR chunk count'
+  const loose = (n: number) => Array.from({ length: n }, (_, i) => ({ name: `c${i}` }))
+  // A ripmap over a 2^31 − 1 square data window in one tile per level (31 × 31 levels) with 100
+  // channels that make 100 views: 96,100 images from a 10 KB header. Headers only.
+  const huge = await exr({ width: 0x7fffffff, height: 0x7fffffff, channels: loose(100), value: () => 0, tiles: { w: 0x7fffffff, h: 0x7fffffff, ripmap: true } }, { headersOnly: true })
+  const started = Date.now()
+  await assert.rejects(() => openDocument(huge, 'exr', platform), imageCount)
+  assert.ok(Date.now() - started < 1000, 'rejected at once')
+  // The cap itself: a 128 × 128 ripmap has 8 × 8 levels, so 128 views make 8192 images and get
+  // past the count (to the missing tables); 129 views do not.
+  const square = (views: number) => exr({ width: 128, height: 128, channels: loose(views), value: () => 0, tiles: { w: 64, h: 64, ripmap: true } }, { headersOnly: true })
+  await assert.rejects(async () => openDocument(await square(128), 'exr', platform), chunkCount)
+  await assert.rejects(async () => openDocument(await square(129), 'exr', platform), imageCount)
+})
+
 test('EXR details in Russian: channel types, tiles, line order and attributes translated', async () => {
   const { englishLeft } = await import('../fixtures/russian')
   const files = [

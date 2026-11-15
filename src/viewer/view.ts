@@ -22,6 +22,7 @@ import {
   toneControls,
   type ToneMap
 } from './tone'
+import { listEntries } from './list'
 import { ThumbCache } from './thumbs'
 import { Viewport } from './viewport'
 
@@ -749,17 +750,8 @@ export class ImageView {
     if (!desc?.list) return
     const axis = desc.axes.findIndex((a) => a.key === desc.list)
     const list = h('div', { className: 'iv-list', role: 'listbox' })
-    const images = desc.images.filter((img) => axis < 0 || desc.images.every((o) => o.at.length === img.at.length))
     // One entry per position on the list axis, with the other axes where the current image is.
-    const shown = new Map<number, ImageDesc>()
-    for (const img of images) {
-      const key = axis >= 0 ? img.at[axis] : img.id
-      const current = this.image
-      const prev = shown.get(key)
-      const matches = (i: ImageDesc) => !current || i.at.every((v, k) => k === axis || v === current.at[k])
-      if (!prev || (!matches(prev) && matches(img))) shown.set(key, img)
-    }
-    for (const img of shown.values()) {
+    for (const img of listEntries(desc.images, axis, this.image)) {
       const row = h(
         'button',
         { className: 'iv-item iv-noeye', type: 'button', role: 'option', 'aria-selected': String(this.image?.id === img.id) },
