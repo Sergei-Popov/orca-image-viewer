@@ -681,7 +681,7 @@ export class ImageView {
       const eye = h('span', { className: 'iv-eye', role: 'checkbox', 'aria-checked': String(on), title: t.showLayer, 'aria-pressed': String(on) }, svg(icon(on ? 'eye' : 'eyeOff')))
       const kindIcon: IconName = layer.kind === 'group' ? 'folder' : layer.kind === 'text' ? 'text' : layer.kind === 'adjustment' || layer.kind === 'fill' ? 'adjust' : 'image'
       const thumb = layer.image >= 0 ? this.thumbBox(layer.image, kindIcon) : h('span', { className: 'iv-thumb iv-plain' }, svg(icon(kindIcon)))
-      const meta = layer.kind === 'group' ? t.group : layer.image >= 0 ? `${layer.blend} · ${Math.round(layer.opacity * 100)}% · ${layer.width}×${layer.height}` : t.noPixels
+      const meta = layer.kind === 'group' ? t.group : layer.image >= 0 ? `${valueText(t, layer.blend)} · ${Math.round(layer.opacity * 100)}% · ${layer.width}×${layer.height}` : t.noPixels
       const row = h(
         'button',
         {

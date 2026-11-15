@@ -23,7 +23,7 @@ const en = {
   notices: {
     'raw-preview': 'Camera RAW: this is the largest preview the camera embedded ({detail}), not a development of the sensor data.',
     'psd-no-composite': 'The file was saved without “Maximize compatibility”, so it has no flattened image. Shown: a simple composite of the visible layers.',
-    'psd-composite-simple': 'Composite of the visible layers: normal blending and opacity only, without effects, masks or adjustments.',
+    'psd-composite-simple': 'Composite of the visible layers made here: blend modes, opacity, masks and clipping, without layer effects or adjustment layers.',
     'damaged-partial': 'The file is damaged or cut off. The part that could be read is shown.',
     'heic-alpha-skipped': 'The transparency of this image could not be decoded; it is shown opaque.',
     'cmyk-converted': 'CMYK shown as RGB with a simple conversion, without the colour profile.',
@@ -249,7 +249,7 @@ const ru: Strings = {
   notices: {
     'raw-preview': 'Camera RAW: показано самое большое превью, встроенное камерой ({detail}), а не проявка данных сенсора.',
     'psd-no-composite': 'Файл сохранён без «Максимальной совместимости», сведённого изображения в нём нет. Показано простое наложение видимых слоёв.',
-    'psd-composite-simple': 'Наложение видимых слоёв: только обычное смешивание и непрозрачность, без эффектов, масок и корректирующих слоёв.',
+    'psd-composite-simple': 'Видимые слои сведены здесь: режимы наложения, непрозрачность, маски и обтравочные маски, без стилей слоя и корректирующих слоёв.',
     'damaged-partial': 'Файл повреждён или обрезан. Показана часть, которую удалось прочитать.',
     'heic-alpha-skipped': 'Прозрачность этого изображения не декодировалась, оно показано непрозрачным.',
     'cmyk-converted': 'CMYK показан как RGB простым пересчётом, без цветового профиля.',

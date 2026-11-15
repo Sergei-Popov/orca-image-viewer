@@ -3,6 +3,7 @@
 
 import { isRadiance, openRadiance } from '../formats/hdr'
 import { openHeif } from '../formats/heif'
+import { openPsd } from '../formats/psd'
 import { isJpegXl, nativeType, openNative } from '../formats/native'
 import { isQoi, openQoi } from '../formats/qoi'
 import { looksLikeTga, openTga } from '../formats/tga'
@@ -70,6 +71,8 @@ export async function openDocument(bytes: Uint8Array, fileType: string | undefin
       return openHeif(bytes, platform)
     case 'tiff':
       return openTiff(bytes, platform)
+    case 'psd':
+      return openPsd(bytes, platform)
     case 'native': {
       const n = nativeType(bytes)
       if (n) return openNative(bytes, n.mime, n.name, platform)
