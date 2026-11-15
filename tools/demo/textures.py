@@ -170,21 +170,23 @@ def terrain(out):
     h, w = 900, 1440
     n = fbm((h, w), rng, octaves=8, base=3)
     ridges = 1 - np.abs(fbm((h, w), rng, octaves=6, base=4) * 2 - 1)
-    elev = (n * 0.65 + ridges**2 * 0.55) * 2600 + 400  # metres
+    elev = (n * 0.45 + ridges**3 * 0.95) * 3600 + 300  # metres
     elev = elev.astype(np.float32)
     # A lake: flat water below 1150 m.
-    water = elev < 1150
-    elev[water] = 1150
-    gy, gx = np.gradient(elev, 30.0)  # 30 m cells
+    # A lake fills the lowest ground; colours follow the elevation's percentiles.
+    sea = np.percentile(elev, 6)
+    water = elev < sea
+    elev[water] = sea
+    gy, gx = np.gradient(elev, 20.0)  # 20 m cells
     slope = np.degrees(np.arctan(np.hypot(gx, gy)))
     az, alt = np.radians(315), np.radians(40)
     aspect = np.arctan2(-gx, gy)
     shade = np.sin(alt) * np.cos(np.radians(slope)) + np.cos(alt) * np.sin(np.radians(slope)) * np.cos(az - aspect)
     shade = np.clip(shade, 0, 1)
-    stops = np.array([1150, 1500, 1900, 2400, 2900, 3400])
+    stops = np.percentile(elev, [6, 30, 55, 78, 90, 97])
     colours = np.array([[86, 128, 74], [128, 156, 88], [176, 164, 112], [150, 118, 92], [136, 128, 124], [246, 246, 250]], np.float32)
     tint = np.stack([np.interp(elev, stops, colours[:, k]) for k in range(3)], axis=-1)
-    rgb = tint * (0.35 + 0.75 * shade[..., None])
+    rgb = tint * (0.5 + 0.6 * shade[..., None])
     rgb[water] = np.array([58, 104, 150]) * (0.9 + 0.1 * shade[water, None])
     rgb = np.clip(rgb, 0, 255).astype(np.uint8)
 
@@ -195,7 +197,7 @@ def terrain(out):
     common = dict(software='Image Viewer demo', datetime='2026:10:02 09:15:00', resolution=(72, 72))
     geo = {
         'extratags': [
-            (33550, 'd', 3, (30.0, 30.0, 0.0), True),  # ModelPixelScale
+            (33550, 'd', 3, (20.0, 20.0, 0.0), True),  # ModelPixelScale
             (33922, 'd', 6, (0, 0, 0, 512000.0, 4510000.0, 0), True),  # ModelTiepoint
         ]
     }
