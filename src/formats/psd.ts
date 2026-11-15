@@ -117,11 +117,16 @@ interface Resources {
   guides: number
   palette: Uint8Array | null
   transparentIndex: number
+  /** Unicode alpha channel names (resource 1045), one per channel after the colour channels. */
   alphaNames: string[]
+  /** Pascal alpha channel names (resource 1006), written by tools that skip 1045. */
+  pascalAlphaNames: string[]
+  /** Alpha identifiers (resource 1053); Photoshop gives the flattened image's transparency 0. */
+  alphaIds: number[]
 }
 
 function readResources(bytes: Uint8Array, from: number, to: number): Resources {
-  const res: Resources = { icc: null, xmp: null, exif: null, resolution: null, realMerged: null, writer: '', guides: 0, palette: null, transparentIndex: -1, alphaNames: [] }
+  const res: Resources = { icc: null, xmp: null, exif: null, resolution: null, realMerged: null, writer: '', guides: 0, palette: null, transparentIndex: -1, alphaNames: [], pascalAlphaNames: [], alphaIds: [] }
   const r = new Reader(bytes.subarray(0, to), false, from)
   while (r.left >= 12) {
     const sig = r.ascii(4)
@@ -178,12 +183,41 @@ function readResources(bytes: Uint8Array, from: number, to: number): Resources {
           }
           break
         }
+        case 1006: {
+          const d = new Reader(data, false)
+          while (d.left >= 1) {
+            const n = d.u8()
+            res.pascalAlphaNames.push(latin1(d.take(Math.min(n, d.left))))
+          }
+          break
+        }
+        case 1053: {
+          const d = new Reader(data, false)
+          while (d.left >= 4) res.alphaIds.push(d.u32())
+          break
+        }
       }
     } catch {
       // A damaged resource is skipped; the image does not depend on it.
     }
   }
   return res
+}
+
+/**
+ * Takes the white back out of a flattened image that was composited over white:
+ * colour = (stored − (1 − alpha)) / alpha, as psd-tools and ImageMagick read it.
+ */
+function unmatte(colour: Samples[], alpha: Samples, top: number): void {
+  const float = top === 1
+  for (const plane of colour) {
+    for (let i = 0; i < plane.length; i++) {
+      const a = alpha[i]
+      if (a <= 0 || a >= top) continue
+      const v = ((plane[i] + a - top) * top) / a
+      plane[i] = v <= 0 ? 0 : v >= top ? top : float ? v : Math.round(v)
+    }
+  }
 }
 
 function blendKey(r: Reader): string {
@@ -685,10 +719,22 @@ export async function openPsd(bytes: Uint8Array, platform: Platform): Promise<De
     }
   }
 
-  // The flattened image's transparency: Photoshop flags it with a negative layer count; other
-  // writers save a flat RGBA document with a fourth channel and no named alpha channels.
+  // The flattened image's transparency channel: Photoshop flags it with a negative layer count or
+  // with alpha identifier 0; other writers save a flat document with one more channel, unnamed or
+  // named "Transparency". Other named channels are spot or saved-selection channels.
   const colourTotal = colourIds(header.mode).length
-  const compositeAlpha = mergedAlpha || (!descs.length && header.channels > colourTotal && !resources.alphaNames.length && header.mode !== 2)
+  const channelNames = resources.alphaNames.length ? resources.alphaNames : resources.pascalAlphaNames
+  const transparencyId = resources.alphaIds.indexOf(0)
+  let transparencyAt = -1
+  if (header.channels > colourTotal) {
+    if (mergedAlpha) transparencyAt = colourTotal
+    else if (transparencyId >= 0 && resources.alphaIds.length <= header.channels - colourTotal) transparencyAt = header.channels - resources.alphaIds.length + transparencyId
+    else if (!descs.length && header.mode !== 2 && (!channelNames.length || channelNames[0] === 'Transparency')) transparencyAt = colourTotal
+  }
+  // Photoshop stores a transparent RGB or grey flattened image composited over white. Writers
+  // that leave the Photoshop marks out (macOS sips, GIMP) store the colour as it is.
+  const matted =
+    transparencyAt >= 0 && (header.mode === 1 || header.mode === 3) && (transparencyId >= 0 || resources.alphaNames.includes('Transparency'))
   const notices: Notice[] = []
   const noComposite = resources.realMerged === false && descs.length > 0
   if (noComposite) notices.push({ code: 'psd-no-composite' })
@@ -705,7 +751,7 @@ export async function openPsd(bytes: Uint8Array, platform: Platform): Promise<De
     const compression = (bytes[imageDataAt] << 8) | bytes[imageDataAt + 1]
     const data = bytes.subarray(imageDataAt + 2)
     const colourCount = colourIds(header.mode).length
-    const wanted = Math.min(header.channels, colourCount + (compositeAlpha ? 1 : 0))
+    const wanted = Math.min(header.channels, transparencyAt >= 0 ? transparencyAt + 1 : colourCount)
     const planes: Samples[] = []
     let complete = true
     if (compression === 1) {
@@ -756,7 +802,8 @@ export async function openPsd(bytes: Uint8Array, platform: Platform): Promise<De
       throw new ImageError('unsupported-compression', `PSD compression ${compression}`)
     }
     const colour = planes.slice(0, colourCount)
-    const alpha = planes.length > colourCount ? planes[colourCount] : null
+    const alpha = transparencyAt >= 0 && planes.length > transparencyAt ? planes[transparencyAt] : null
+    if (alpha && matted) unmatte(colour, alpha, d === 32 ? 1 : d === 16 ? 65535 : 255)
     const local: Notice[] = []
     const out = toRaster(header, width, height, colour, alpha, palette, local)
     if (!complete) out.partial = true
@@ -940,9 +987,9 @@ export async function openPsd(bytes: Uint8Array, platform: Platform): Promise<De
     { key: 'bitDepth', value: header.depth === 32 ? '32 (float)' : String(header.depth) },
     { key: 'channels', value: String(header.channels) }
   ]
-  const extraChannels = header.channels - colourTotal - (compositeAlpha ? 1 : 0)
+  const extraChannels = header.channels - colourTotal - (transparencyAt >= 0 ? 1 : 0)
   if (extraChannels > 0) {
-    const names = resources.alphaNames.filter(Boolean)
+    const names = channelNames.filter((name, i) => name && colourTotal + i !== transparencyAt)
     imageItems.push({ key: 'alpha', value: names.length ? names.join(', ') : String(extraChannels) })
   }
   if (descs.length) {
