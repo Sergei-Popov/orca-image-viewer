@@ -8,7 +8,7 @@ import type { DocDesc, ImageDesc, InfoSection, LayerDesc, Raster } from '../core
 import { encodePng } from '../core/png'
 import type { Thumbnail } from '../core/protocol'
 import { append, h, svg } from '../dom'
-import { fill, formatSize, imageText, label, type Strings, valueText } from '../i18n'
+import { fill, formatSize, imageText, infoValue, label, type Strings, valueText } from '../i18n'
 import { icon, type IconName } from '../icons'
 import {
   autoTone,
@@ -588,7 +588,12 @@ export class ImageView {
     const add = (items: typeof s.items) => {
       for (const item of items) {
         const key = s.raw ? item.key : label(t, item.key)
-        dl.append(h('dt', { title: key }, key), h('dd', { className: item.mono ? 'iv-mono' : '' }, valueText(t, item.value)))
+        const value = s.raw
+          ? valueText(t, item.value)
+          : item.key === 'fileSize' && /^\d+$/.test(item.value)
+            ? formatSize(Number(item.value), this.locale, t.units)
+            : infoValue(t, item.key, item.value)
+        dl.append(h('dt', { title: key }, key), h('dd', { className: item.mono ? 'iv-mono' : '' }, value))
       }
     }
     add(s.items.slice(0, limit))

@@ -148,3 +148,22 @@ test('Image labels in Russian: generated words translated, names from the file k
     assert.equal(imageText(en, source), source)
   }
 })
+
+test('Info values in Russian: units, flash modes and compass points; English as made', async () => {
+  const { infoValue, stringsFor } = await import('../i18n')
+  const ru = stringsFor('ru')
+  const en = stringsFor('en')
+  const cases: [string, string, string][] = [
+    ['exposure', '1/8 s · f/2.8 · ISO 100 · +0.3 EV', '1/8 с · f/2.8 · ISO 100 · +0.3 EV'],
+    ['focalLength', '86 mm (35 mm equivalent: 129 mm)', '86 мм (в пересчёте на 35 мм: 129 мм)'],
+    ['flash', 'Did not fire, off', 'Не сработала, выключена'],
+    ['latitude', '47° 57′ 30.63″ N', '47° 57′ 30.63″ с. ш.'],
+    ['altitude', '602.4 m', '602.4 м'],
+    ['compression', 'None', 'Нет'],
+    ['camera', 'Test Camera', 'Test Camera']
+  ]
+  for (const [key, english, russian] of cases) {
+    assert.equal(infoValue(ru, key, english), russian)
+    assert.equal(infoValue(en, key, english), english)
+  }
+})

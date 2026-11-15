@@ -233,7 +233,9 @@ const en = {
     Premultiplied: 'Premultiplied',
     Opaque: 'Opaque',
     Custom: 'Custom',
-    Legacy: 'Legacy'
+    Legacy: 'Legacy',
+    'Lossless JPEG': 'Lossless JPEG',
+    Packed: 'Packed'
   },
   imageLabels: {
     page: 'Page {n}',
@@ -268,6 +270,8 @@ const en = {
     noChannels: 'no channels',
     compression: '{name} compression'
   },
+  /** Rewrites of info values by key (units, flash modes); English values are shown as made. */
+  valueRules: {} as Record<string, [RegExp, string][]>,
   units: { b: 'B', kb: 'KB', mb: 'MB', gb: 'GB' }
 }
 
@@ -505,7 +509,9 @@ const ru: Strings = {
     Premultiplied: 'Предумноженная',
     Opaque: 'Непрозрачная',
     Custom: 'Особая',
-    Legacy: 'Старый'
+    Legacy: 'Старый',
+    'Lossless JPEG': 'JPEG без потерь',
+    Packed: 'Упакованные данные'
   },
   imageLabels: {
     page: 'Страница {n}',
@@ -539,6 +545,37 @@ const ru: Strings = {
     deepData: 'глубинные данные',
     noChannels: 'нет каналов',
     compression: 'сжатие {name}'
+  },
+  valueRules: {
+    exposure: [[/(\d) s\b/, '$1 с']],
+    focalLength: [
+      [/^([\d.]+) mm \(35 mm equivalent: (\d+) mm\)$/, '$1 мм (в пересчёте на 35 мм: $2 мм)'],
+      [/^([\d.]+) mm$/, '$1 мм']
+    ],
+    flash: [
+      [/Did not fire/, 'Не сработала'],
+      [/Fired/, 'Сработала'],
+      [/compulsory/, 'принудительно'],
+      [/\boff\b/, 'выключена'],
+      [/\bauto\b/, 'авто'],
+      [/red-eye reduction/, 'подавление красных глаз'],
+      [/no flash function/, 'вспышки нет']
+    ],
+    altitude: [[/ m$/, ' м']],
+    latitude: [
+      [/ N$/, ' с. ш.'],
+      [/ S$/, ' ю. ш.']
+    ],
+    longitude: [
+      [/ E$/, ' в. д.'],
+      [/ W$/, ' з. д.']
+    ],
+    direction: [[/ magnetic$/, ' (магнитный)']],
+    speed: [
+      [/ km\/h$/, ' км/ч'],
+      [/ mph$/, ' миль/ч'],
+      [/ knots$/, ' уз']
+    ]
   },
   units: { b: 'Б', kb: 'КБ', mb: 'МБ', gb: 'ГБ' }
 }
@@ -614,6 +651,15 @@ export function imageText(t: Strings, text: string): string {
       return segment
     })
     .join(' · ')
+}
+
+/** An info value in the UI language: whole known values, then the key's rewrite rules. */
+export function infoValue(t: Strings, key: string, value: string): string {
+  const whole = valueText(t, value)
+  if (whole !== value) return whole
+  let out = value
+  for (const [pattern, replacement] of t.valueRules[key] ?? []) out = out.replace(pattern, replacement)
+  return out
 }
 
 export function formatSize(bytes: number, locale: string, units: Strings['units']): string {

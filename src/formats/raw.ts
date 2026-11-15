@@ -31,6 +31,19 @@ const FORMAT_NAMES: Record<string, string> = {
   srw: 'Samsung SRW'
 }
 
+/** Compression codes of camera sensor data, beyond TIFF's own. */
+const RAW_COMPRESSION: Record<number, string> = {
+  7: 'Lossless JPEG',
+  32766: 'Sony ARW',
+  32767: 'Sony ARW',
+  32769: 'Packed',
+  32770: 'Samsung SRW',
+  32772: 'Samsung SRW',
+  34713: 'Nikon NEF',
+  65000: 'Kodak DCR',
+  65535: 'Pentax PEF'
+}
+
 const CANON_UUID = '85c0b687820f11e08111f4ce462b6a48'
 
 /** A preview: a JPEG stream, or a small uncompressed TIFF image (NEF and DNG thumbnails). */
@@ -343,7 +356,7 @@ export async function openRaw(bytes: Uint8Array, fileType: string | undefined, p
       const bits = tiff.values(s.entries.get(T.BitsPerSample), 4)
       if (bits.length) imageItems.push({ key: 'bitDepth', value: `${bits[0]}-bit` })
       const c = tiff.value(s.entries.get(T.Compression))
-      if (c) imageItems.push({ key: 'compression', value: COMPRESSION_NAMES[c] ?? `code ${c}` })
+      if (c) imageItems.push({ key: 'compression', value: RAW_COMPRESSION[c] ?? COMPRESSION_NAMES[c] ?? String(c) })
     }
   } else {
     throw unsupportedFeature('this RAW variant')
