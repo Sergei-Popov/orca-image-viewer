@@ -1,0 +1,32 @@
+{
+  "$schema": "https://raw.githubusercontent.com/stablyai/orca/main/docs/schemas/plugins/orca-plugin.v2.schema.json",
+  "manifestVersion": 2,
+  "id": "image-viewer",
+  "name": "Image Viewer",
+  "version": "0.1.0",
+  "description": "Images Orca can't open, in its editor tabs: TIFF, HEIC, PSD, EXR, HDR, TGA, DDS, QOI, ICNS and camera RAW, with zoom, pixel values, pages and layers, metadata and Save as PNG. Offline.",
+  "engines": {
+    "orca": ">=1.4.248"
+  },
+  "execution": "sandboxed-ui",
+  "pluginApi": 1,
+  "contributes": {
+    "customEditors": [
+      {
+        "id": "image-viewer",
+        "title": "Image Viewer",
+        "extensions": [
+          ".image-viewer"
+        ],
+        "entry": "editor/main.ts",
+        "frame": "isolated"
+      }
+    ]
+  },
+  "author": {
+    "name": "Сергей Попов",
+    "url": "https://github.com/Sergei-Popov"
+  },
+  "repository": "https://github.com/Sergei-Popov/orca-image-viewer",
+  "license": "MIT"
+}
