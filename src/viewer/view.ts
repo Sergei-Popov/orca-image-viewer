@@ -537,7 +537,9 @@ export class ImageView {
 
   private listTitle(key: DocDesc['list']): string {
     if (key === 'page') return this.t.labels.pages
-    if (key === 'size') return this.t.axes.size
+    if (key === 'size') return this.t.labels.sizes
+    if (key === 'mip') return this.t.labels.mipmaps
+    if (key === 'face') return this.t.labels.faces
     return this.t.tabs.list
   }
 

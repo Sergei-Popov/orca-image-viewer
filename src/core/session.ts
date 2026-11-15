@@ -4,6 +4,7 @@
 import { openDds } from '../formats/dds'
 import { openExr } from '../formats/exr'
 import { isRadiance, openRadiance } from '../formats/hdr'
+import { openIcns } from '../formats/icns'
 import { openHeif } from '../formats/heif'
 import { openPsd } from '../formats/psd'
 import { isJpegXl, nativeType, openNative } from '../formats/native'
@@ -79,6 +80,8 @@ export async function openDocument(bytes: Uint8Array, fileType: string | undefin
       return openExr(bytes, platform)
     case 'dds':
       return openDds(bytes)
+    case 'icns':
+      return openIcns(bytes, platform)
     case 'native': {
       const n = nativeType(bytes)
       if (n) return openNative(bytes, n.mime, n.name, platform)
