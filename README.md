@@ -1,5 +1,7 @@
 # Image Viewer for Orca
 
+![Image Viewer in an Orca tab](images/cover.png)
+
 Image formats that [Orca](https://orca.dev) cannot show on its own, opened in its editor tabs: from
 the file tree, a file link in an agent chat, or `orca file open`, like any picture. Without the
 plugin Orca shows "Binary file — cannot display" for them.
@@ -36,6 +38,18 @@ register them.
   for RAW files. Each value can be copied.
 - **Save as PNG.** Saves what you see — the current image, layer or channel with its exposure —
   through Orca's save dialog. **Copy** puts it on the clipboard where the system allows it.
+
+## Screenshots
+
+![The Layers tab lists layers and groups with blend mode, opacity and size; the Badge smart object is shown alone at 100%.](images/shot-1-psd-layers.png)
+
+![A Radiance HDR render at −2.0 EV, Filmic: the lamp keeps its shape, and the pixel readout shows its stored R 16.0625.](images/shot-2-hdr-exposure.png)
+
+![A DNG's embedded preview beside its camera and location details: 1/250 s, f/8, ISO 100, 35 mm, 40° 45′ 36″ N, 113° 53′ 24″ W.](images/shot-3-raw-exif.png)
+
+![A DDS cube map in 16-bit float: the Face and Mip pickers in the toolbar, and a Faces list of all six faces with −Z shown.](images/shot-4-dds-cube.png)
+
+![A HEIC photo with its details: a 4 × 2 grid of 512 × 512 tiles, codec hvc1.3.E.L90.B0, 8-bit. Shown in Orca's light theme.](images/shot-5-heic.png)
 
 ## Formats
 
@@ -151,6 +165,9 @@ orca plugin shot local.image-viewer --editor "$PWD/path/to/image.tif"   # PNG of
   layered poster (`poster.py`), DDS textures and a terrain TIFF (`textures.py`), and the DNG and
   PSD containers (`containers.ts`). Everything they draw is made by them; the demo camera is
   fictional. Put the output in `.samples/` (git-ignored).
+- `tools/listing-samples.sh` — runs those generators into `.orca/listing/samples/` (git-ignored) for
+  the listing images; `tools/listing.json` is the spec the hub's `scripts/listing-image.sh` turns
+  into `images/cover.png` and the five `images/shot-*.png` screenshots.
 - `tools/rasterize-icons.sh` — the PNG icons from `icons/*.svg` and `images/icon.svg`.
 
 ## Trademarks

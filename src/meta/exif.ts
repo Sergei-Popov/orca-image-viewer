@@ -422,7 +422,8 @@ export function exifSummary(tiff: Tiff, dirs: ExifDirs, options: { imageTags: bo
   if (t) parts.push(exposureText(t))
   if (f) parts.push(`f/${trimNum(f, 1)}`)
   if (iso) parts.push(`ISO ${iso}`)
-  if (bias) parts.push(`${bias > 0 ? '+' : ''}${trimNum(bias, 2)} EV`)
+  // Signed like the viewer's other numbers: + or the minus sign (U+2212).
+  if (bias) parts.push(`${bias > 0 ? '+' : '−'}${trimNum(Math.abs(bias), 2)} EV`)
   if (parts.length) camera.push({ key: 'exposure', value: parts.join(' · ') })
   if (focal) camera.push({ key: 'focalLength', value: `${trimNum(focal, 1)} mm${focal35 && focal35 !== Math.round(focal) ? ` (35 mm equivalent: ${focal35} mm)` : ''}` })
   const flash = num(exif, 0x9209)
