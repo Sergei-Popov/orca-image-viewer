@@ -285,7 +285,7 @@ test('TIFF metadata: EXIF camera details, XMP and the ICC profile', async () => 
       { tag: 272, text: 'Model 9' },
       { tag: 700, type: 1, bytes: new TextEncoder().encode(xmp) },
       { tag: 34675, bytes: icc('Test RGB profile') },
-      { tag: 34665, ifd: { entries: [{ tag: 0x829a, type: 5, values: [1, 125] }, { tag: 0x8827, type: 3, values: [400] }] } },
+      { tag: 34665, ifd: { entries: [{ tag: 0x829a, type: 5, values: [1, 125] }, { tag: 0x8827, type: 3, values: [400] }, { tag: 0x9204, type: 10, values: [-1, 3] }] } },
       // GPS time with a fraction of a second: 23:59:30.5.
       { tag: 34853, ifd: { entries: [{ tag: 7, type: 5, values: [23, 1, 59, 1, 305, 10] }, { tag: 29, text: '2024:02:29' }] } }
     ]
@@ -296,7 +296,8 @@ test('TIFF metadata: EXIF camera details, XMP and the ICC profile', async () => 
   assert.equal(item(d, 'image', 'iccDetails'), 'RGB · Display · v4.3')
   assert.equal(item(d, 'xmp', 'dc:creator'), 'Test Person')
   assert.ok(item(d, 'camera', 'camera')?.includes('Model 9'))
-  assert.ok(item(d, 'camera', 'exposure')?.includes('1/125 s'))
+  // A negative exposure bias takes the minus sign, as the viewer's other numbers do.
+  assert.equal(item(d, 'camera', 'exposure'), '1/125 s · ISO 400 · −0.33 EV')
   assert.equal(item(d, 'gps', 'gpsTime'), '2024-02-29 23:59:30.5 UTC')
 })
 

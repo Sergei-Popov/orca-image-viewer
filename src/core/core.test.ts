@@ -155,6 +155,7 @@ test('Info values in Russian: units, flash modes and compass points; English as 
   const en = stringsFor('en')
   const cases: [string, string, string][] = [
     ['exposure', '1/8 s · f/2.8 · ISO 100 · +0.3 EV', '1/8 с · f/2.8 · ISO 100 · +0.3 EV'],
+    ['exposure', '1/250 s · f/8 · ISO 100 · −0.33 EV', '1/250 с · f/8 · ISO 100 · −0.33 EV'],
     ['focalLength', '86 mm (35 mm equivalent: 129 mm)', '86 мм (в пересчёте на 35 мм: 129 мм)'],
     ['flash', 'Did not fire, off', 'Не сработала, выключена'],
     ['latitude', '47° 57′ 30.63″ N', '47° 57′ 30.63″ с. ш.'],
