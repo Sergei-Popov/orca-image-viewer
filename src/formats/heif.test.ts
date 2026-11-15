@@ -145,3 +145,14 @@ test('HEIF damaged: no meta box, no primary image, item data past the end', asyn
     (e: unknown) => codeOf(e) === 'damaged'
   )
 })
+
+test('HEIF damaged: a coded image whose ispe size is past the limits is too large before decoding', async () => {
+  const file = heif({ primary: 1, items: [{ id: 1, type: 'hvc1', data: coded(5, 6, 7), props: [hvcC(), ispe(16318468, 2)] }] })
+  let decoded = false
+  const doc = await openDocument(file, 'heic', { inflate, decodeVideo: { ...video, decode: async (...args: Parameters<typeof video.decode>) => ((decoded = true), video.decode(...args)) } })
+  await assert.rejects(
+    () => doc.decode(0),
+    (e: unknown) => codeOf(e) === 'too-large'
+  )
+  assert.equal(decoded, false)
+})

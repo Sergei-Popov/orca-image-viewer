@@ -511,6 +511,8 @@ export async function openHeif(bytes: Uint8Array, platform: Platform): Promise<D
       throw new ImageError('no-video-decoder', kind === 'hvc1' ? 'HEVC' : 'AV1')
     }
     const sizes = list.map((it) => itemSize(heif, it))
+    // Sizes come from the file's ispe boxes: check them before the decoder makes frames that big.
+    for (const s of sizes) if (s.width && s.height) checkSize(s.width, s.height, 4)
     const color = colourOf(heif, list).color
     const data = await decoder.decode(
       codecName,
