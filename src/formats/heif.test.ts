@@ -119,12 +119,12 @@ test('HEIF clean aperture, codec strings, and no decoder for the codec', async (
   const without = await openDocument(file, 'heic', { inflate })
   await assert.rejects(
     () => without.decode(0),
-    (e: unknown) => codeOf(e) === 'no-decoder'
+    (e: unknown) => codeOf(e) === 'no-video-decoder' && (e as { detail: string }).detail === 'HEVC'
   )
   const refusing = await openDocument(file, 'heic', { inflate, decodeVideo: { ...video, supported: async () => false } })
   await assert.rejects(
     () => refusing.decode(0),
-    (e: unknown) => codeOf(e) === 'no-decoder' && (e as { detail: string }).detail.includes('HEVC')
+    (e: unknown) => codeOf(e) === 'no-video-decoder' && (e as { detail: string }).detail === 'HEVC'
   )
 })
 

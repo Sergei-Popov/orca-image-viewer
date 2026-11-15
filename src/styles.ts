@@ -141,6 +141,10 @@ button, select, input { font: inherit; color: inherit; }
   display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 999px; pointer-events: auto;
   background: var(--popover); color: var(--popover-fg); border: 1px solid var(--border); box-shadow: 0 4px 16px rgb(0 0 0 / .14);
 }
+.iv-overlay .iv-pill.iv-card { border-radius: 10px; align-items: flex-start; max-width: min(480px, calc(100% - 32px)); padding: 10px 14px; }
+.iv-pill.iv-card > svg { flex: none; margin-top: 2px; }
+.iv-pill-title { font-weight: 500; }
+.iv-pill-hint { margin-top: 4px; color: var(--muted-fg); }
 .iv-side { min-width: 0; min-height: 0; display: flex; flex-direction: column; background: var(--bg); }
 .iv-tabs { display: flex; gap: 2px; padding: 6px 8px 0; border-bottom: 1px solid var(--border); }
 .iv-tab {

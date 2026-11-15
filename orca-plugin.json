@@ -5,7 +5,7 @@
   "id": "image-viewer",
   "name": "Image Viewer",
   "version": "0.1.0",
-  "description": "Images Orca cannot show, in its editor tabs: TIFF, HEIC and HEIF, PSD and PSB, OpenEXR, Radiance HDR, TGA, DDS, QOI, ICNS, and the embedded previews of camera RAW files (DNG, CR2, CR3, NEF, ARW, RAF, RW2, ORF, PEF, SRW). Zoom and pan, pixel values, pages, layers, mip levels and sizes, exposure and tone mapping for HDR, EXIF, XMP and GPS details, and Save as PNG. Read-only, offline.",
+  "description": "Image formats Orca can't show, in its editor tabs: TIFF, HEIC and HEIF, PSD and PSB, EXR, HDR, TGA, DDS, QOI, ICNS, and the embedded previews of camera RAW files. Zoom to the pixel, pages, layers and mip levels, HDR exposure, channels, EXIF, XMP and GPS details, Save as PNG. Read-only, offline.",
   "author": {
     "name": "Sergei Popov",
     "url": "https://github.com/Sergei-Popov"
@@ -32,7 +32,7 @@
       {
         "id": "raw",
         "title": "Image Viewer",
-        "extensions": [".dng", ".cr2", ".cr3", ".nef", ".nrw", ".arw", ".srf", ".raf", ".rw2", ".orf", ".pef", ".srw"],
+        "extensions": [".dng", ".cr2", ".cr3", ".nef", ".nrw", ".arw", ".srf", ".raf", ".rw2", ".orf", ".pef", ".srw", ".sr2", ".ori", ".rwl", ".iiq", ".erf", ".kdc", ".mos"],
         "entry": "src/editor.ts",
         "priority": "default",
         "contentKind": "bytes",

@@ -11,7 +11,8 @@ All notable changes to this plugin are documented here. The format follows
 
 - Image Viewer, the default editor for `.tif`, `.tiff`, `.psd`, `.psb`, `.exr`, `.hdr`, `.pic`,
   `.tga`, `.dds`, `.qoi`, `.icns`, `.heic`, `.heif` and `.hif`, and for the camera RAW files
-  `.dng`, `.cr2`, `.cr3`, `.nef`, `.nrw`, `.arw`, `.srf`, `.raf`, `.rw2`, `.orf`, `.pef` and `.srw`.
+  `.dng`, `.cr2`, `.cr3`, `.nef`, `.nrw`, `.arw`, `.srf`, `.sr2`, `.raf`, `.rw2`, `.rwl`, `.orf`,
+  `.ori`, `.pef`, `.srw`, `.iiq`, `.mos`, `.erf` and `.kdc`.
 - TIFF: pages and reduced-resolution sub-images, strips and tiles, chunky and planar, 1–32-bit
   integers and 16–64-bit floats, LZW, Deflate, PackBits, JPEG and WebP, predictors, RGB, grey,
   palette, CMYK, YCbCr and CIELAB, BigTIFF.
@@ -25,9 +26,11 @@ All notable changes to this plugin are documented here. The format follows
 - DDS: uncompressed formats, BC1–BC7 including BC6H, MIP levels, cube faces, array layers and
   volume slices.
 - HEIC and HEIF: own container reader with grids, rotation, mirroring, cropping, alpha, depth and
-  matte images, thumbnails; HEVC and AV1 decoded by the system through WebCodecs.
+  matte images, thumbnails; HEVC and AV1 decoded by the system through WebCodecs, and a plain
+  explanation with the file's details where the system has no HEVC decoder.
 - Camera RAW: the largest embedded preview and the smaller ones, EXIF, sensor details and maker
-  notes for eight makers; no RAW development, said in a notice.
+  notes for eight makers, the camera name from XMP when the TIFF tags lack it; no RAW development,
+  said in a notice.
 - Zoom and pan, Fit and 1:1, checkerboard and pixel grid, pixel values under the pointer, image
   pickers with thumbnails, channel views, histogram, exposure and tone curves for HDR, levels and
   auto contrast, keyboard shortcuts.

@@ -7,6 +7,9 @@ const en = {
   noHost: 'This page runs as an Orca custom editor.',
   textContent: 'Orca sent this file as text; Image Viewer needs its raw bytes.',
   errorTitle: 'This image cannot be shown',
+  /** Shown under the no-decoder message for HEVC (HEIC pictures). */
+  hevcHint:
+    'HEIC pictures are compressed with HEVC, which Orca decodes only with the graphics hardware. A Mac always can; on Windows and Linux it depends on the graphics card and its driver (on Linux also on VA-API support). The file’s details are in the side pane.',
   errors: {
     empty: 'The file is empty.',
     'unknown-format': 'This file is not in a format Image Viewer reads, or its header is damaged.',
@@ -17,6 +20,7 @@ const en = {
     'unsupported-feature': '{detail} is not supported yet.',
     'too-large': 'The image is too large to decode in a tab ({detail} pixels).',
     'no-decoder': 'This Orca has no decoder for {detail}.',
+    'no-video-decoder': 'This computer has no {detail} decoder that Orca can use, so the picture cannot be shown.',
     'decode-failed': 'The image data could not be decoded ({detail}).',
     'text-file': 'This is a text file, not an image. Switch to Source in the view toggle to read it.'
   },
@@ -328,6 +332,8 @@ const ru: Strings = {
   noHost: 'Эта страница работает как редактор Orca.',
   textContent: 'Orca передала файл как текст, а просмотрщику нужны исходные байты.',
   errorTitle: 'Изображение не открывается',
+  hevcHint:
+    'Картинки HEIC сжаты в HEVC, а его Orca декодирует только средствами видеокарты. На Mac это работает всегда; в Windows и Linux зависит от видеокарты и её драйвера (в Linux ещё и от поддержки VA-API). Сведения о файле — в боковой панели.',
   errors: {
     empty: 'Файл пуст.',
     'unknown-format': 'Формат этого файла Image Viewer не читает, или заголовок повреждён.',
@@ -338,6 +344,7 @@ const ru: Strings = {
     'unsupported-feature': '{detail} пока не поддерживается.',
     'too-large': 'Изображение слишком большое для вкладки ({detail} пикселей).',
     'no-decoder': 'В этой Orca нет декодера для {detail}.',
+    'no-video-decoder': 'На этом компьютере нет декодера {detail}, доступного Orca, поэтому картинку не показать.',
     'decode-failed': 'Не удалось декодировать данные изображения ({detail}).',
     'text-file': 'Это текстовый файл, а не изображение. Чтобы его прочитать, переключитесь на Source.'
   },
@@ -855,6 +862,11 @@ export function imageText(t: Strings, text: string): string {
 
 /** An info value in the UI language: whole known values, then the key's rewrite rules. */
 /** An error's detail in the UI language; English details are shown as made. */
+/** A second line under an error message, when there is something the user can check. */
+export function errorHint(t: Strings, code: string, detail: string): string {
+  return code === 'no-video-decoder' && detail === 'HEVC' ? t.hevcHint : ''
+}
+
 export function errorDetail(t: Strings, detail: string): string {
   const whole = t.errorDetails[detail]
   if (whole) return whole

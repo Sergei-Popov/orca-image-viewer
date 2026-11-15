@@ -1,7 +1,8 @@
 // Camera RAW files: the previews the camera embedded (the largest first) and the camera's details.
 // The sensor data itself is not developed. TIFF-structured RAWs (DNG, CR2, NEF, NRW, ARW, SRF, SR2,
-// PEF, SRW, ORF, RW2), Canon CR3 (ISO base media) and Fujifilm RAF are read; previews are found
-// through the file's own pointers and by scanning for JPEG streams, so unknown variants still work.
+// PEF, SRW, ORF, ORI, RW2, RWL, IIQ, ERF, KDC, MOS), Canon CR3 (ISO base media) and Fujifilm RAF are
+// read; previews are found through the file's own pointers and by scanning for JPEG streams, so
+// unknown variants still work.
 
 import { hex, latin1, startsWith } from '../core/bytes'
 import { ImageError, unsupportedFeature } from '../core/errors'
@@ -10,7 +11,7 @@ import { raster } from '../core/model'
 import { dropAlpha, orient } from '../core/pixels'
 import { exifDirs, exifFromBlock, exifSummary, type ExifSummary, genericValue } from '../meta/exif'
 import { type Ifd, T, Tiff } from '../meta/ifd'
-import { xmpSection } from '../meta/xmp'
+import { xmpProperties, xmpSection } from '../meta/xmp'
 import { readBoxes } from './isobmff'
 import { browserDecodable, findJpegs, type JpegInfo, jpegInfo } from './jpeg'
 import { COMPRESSION_NAMES, decodeIfd, isImageIfd, readImage } from './tiff'
@@ -28,7 +29,13 @@ const FORMAT_NAMES: Record<string, string> = {
   rw2: 'Panasonic RW2',
   orf: 'Olympus ORF',
   pef: 'Pentax PEF',
-  srw: 'Samsung SRW'
+  srw: 'Samsung SRW',
+  ori: 'Olympus ORI',
+  rwl: 'Leica RWL',
+  iiq: 'Phase One IIQ',
+  erf: 'Epson ERF',
+  kdc: 'Kodak KDC',
+  mos: 'Leaf MOS'
 }
 
 /** Compression codes of camera sensor data, beyond TIFF's own. */
@@ -93,6 +100,8 @@ function relativeTiff(note: Uint8Array, little: boolean, ifdAt: number): Tiff {
 
 interface MakerNote {
   vendor: string
+  /** The vendor whose layout the note follows, when another maker borrowed it (Epson: Olympus). */
+  layout?: string
   tiff: Tiff
   ifd: Ifd
   /** Where the note's TIFF bytes start, as an offset into the file's TIFF bytes. */
@@ -112,7 +121,8 @@ function readMakerNote(tiff: Tiff, note: Uint8Array, at: number, make: string): 
       const sub = relativeTiff(note, note[order] === 0x49, order + 4)
       return { vendor: 'Olympus', tiff: sub, ifd: sub.readIfd(sub.first), base: at }
     }
-    if (head.startsWith('OLYMP\0') || head.startsWith('EPSON\0')) return { vendor: 'Olympus', tiff, ifd: tiff.readIfd(at + 8), base: 0 }
+    if (head.startsWith('OLYMP\0')) return { vendor: 'Olympus', tiff, ifd: tiff.readIfd(at + 8), base: 0 }
+    if (head.startsWith('EPSON\0')) return { vendor: 'Epson', layout: 'Olympus', tiff, ifd: tiff.readIfd(at + 8), base: 0 }
     if (head.startsWith('FUJIFILM')) {
       const offset = note[8] | (note[9] << 8) | (note[10] << 16) | (note[11] << 24)
       const sub = relativeTiff(note, true, offset)
@@ -147,7 +157,7 @@ function makerItems(note: MakerNote): InfoItem[] {
       const name = names[e.tag]
       try {
         // Olympus keeps its lens and body details in an equipment directory.
-        if (depth === 0 && note.vendor === 'Olympus' && e.tag === 0x2010) {
+        if (depth === 0 && (note.layout ?? note.vendor) === 'Olympus' && e.tag === 0x2010) {
           visit(note.tiff.readIfd(note.tiff.value(e)), MAKER_TAGS['Olympus.2010'], depth + 1)
           continue
         }
@@ -182,7 +192,7 @@ function makerItems(note: MakerNote): InfoItem[] {
       }
     }
   }
-  visit(note.ifd, MAKER_TAGS[note.vendor] ?? {}, 0)
+  visit(note.ifd, MAKER_TAGS[note.layout ?? note.vendor] ?? {}, 0)
   return items
 }
 
@@ -388,6 +398,21 @@ export async function openRaw(bytes: Uint8Array, fileType: string | undefined, p
   for (const p of list) {
     const own = p.kind === 'jpeg' && p.info.exif ? (exifFromBlock(p.info.exif)?.orientation ?? 1) : 1
     p.rotate = own > 1 ? 1 : orientation
+  }
+
+  // Leaf MOS names the camera only in its XMP.
+  if (summary && !summary.make && !summary.model && xmp) {
+    const props = xmpProperties(xmp)
+    const prop = (key: string) => props.find((p) => p.key === key)?.value.trim() ?? ''
+    // Leaf pads the back's serial number with spaces: "Aptus 22(LF00000    )".
+    const make = prop('tiff:Make').replace(/\s+/g, ' ')
+    const model = prop('tiff:Model').replace(/\s+/g, ' ').replace(/ \)/g, ')')
+    if (make || model) {
+      const shown = model.toLowerCase().startsWith(make.toLowerCase().split(' ')[0]) ? model : `${make} ${model}`.trim()
+      let camera = summary.sections.find((x) => x.title === 'camera')
+      if (!camera) summary.sections.unshift((camera = { title: 'camera', items: [] }))
+      camera.items.unshift({ key: 'camera', value: shown })
+    }
   }
 
   const images: ImageDesc[] = list.map((p, id) => {
