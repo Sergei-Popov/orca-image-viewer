@@ -303,11 +303,13 @@ export async function openExr(bytes: Uint8Array, platform: Platform): Promise<De
         const { text, value } = attrValue(new Reader(bytes.subarray(0, start + size), true, start), type, size, start)
         if (value !== null) values.set(name, value)
         if (type === 'int') values.set(name, new DataView(bytes.buffer, bytes.byteOffset + start, 4).getInt32(0, true))
-        if (name !== 'channels') attrs.push({ key: name, value: text.slice(0, 600) })
-        else attrs.unshift({ key: name, value: text })
+        // String attributes are the file's text; the others are written by the reader.
+        const term = type !== 'string' && type !== 'stringvector'
+        if (name !== 'channels') attrs.push({ key: name, value: text.slice(0, 600), term })
+        else attrs.unshift({ key: name, value: text, term })
       } catch (error) {
         if (name === 'channels' || name === 'dataWindow') throw error
-        attrs.push({ key: name, value: `${type} (unreadable)` })
+        attrs.push({ key: name, value: `${type} (unreadable)`, term: true })
       }
       r.seek(start + size)
     }
@@ -336,12 +338,14 @@ export async function openExr(bytes: Uint8Array, platform: Platform): Promise<De
   }
   if (!parts.length) throw damaged('EXR header')
 
-  // Offset tables, one per part.
-  for (const part of parts) {
-    const n = part.chunkCount || chunkCountOf(part)
-    if (n > 1 << 24) throw damaged('EXR chunk count')
-    for (let i = 0; i < n; i++) part.offsets.push(r.left >= 8 ? r.u64() : 0)
-  }
+  // Offset tables, one per part, all before the first chunk: their total length must fit in the
+  // file (chunkCount comes from the header, and a damaged one must not allocate millions of zeros).
+  const counts = parts.map((part) => part.chunkCount || chunkCountOf(part))
+  const total = counts.reduce((a, n) => a + n, 0)
+  if (counts.some((n) => n > 1 << 24) || total * 8 > r.left) throw damaged('EXR chunk count')
+  parts.forEach((part, k) => {
+    for (let i = 0; i < counts[k]; i++) part.offsets.push(r.u64())
+  })
   const tableEnd = r.pos
   // A damaged table: find the chunks by walking them from the end of the tables.
   if (parts.some((p) => p.offsets.some((o) => o < tableEnd || o >= bytes.length))) rebuildOffsets(bytes, parts, tableEnd, multipart)
@@ -590,7 +594,8 @@ export async function openExr(bytes: Uint8Array, platform: Platform): Promise<De
       images,
       axes,
       primary: Math.max(0, images.findIndex((i) => !i.unsupported)),
-      list: undefined,
+      // Parts or layers with thumbnails in the side pane (at the chosen level), else the levels.
+      list: axes[0]?.key,
       info: sections,
       notices
     },

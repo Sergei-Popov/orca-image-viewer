@@ -1,7 +1,7 @@
 // The PNG writer behind "Save as PNG" and the tone pipeline that turns samples into screen pixels.
 
 import { assert, test } from 'orca/testing'
-import { autoTone, DEFAULT_TONE, formatFloat, histogram, initialTone, overview, pixelValues, renderRegion, type Tone } from '../viewer/tone'
+import { autoTone, DEFAULT_TONE, formatFloat, histogram, initialTone, overview, pixelValues, renderRegion, type Tone, toneControls } from '../viewer/tone'
 import { toHalf } from './half'
 import { inflate } from './inflate'
 import { raster, type Raster } from './model'
@@ -160,7 +160,7 @@ test('Info values in Russian: units, flash modes and compass points; English as 
     ['latitude', '47° 57′ 30.63″ N', '47° 57′ 30.63″ с. ш.'],
     ['altitude', '602.4 m', '602.4 м'],
     ['compression', 'None', 'Нет'],
-    ['layers', '11 (2 groups)', '11 (групп: 2)'],
+    ['layers', '11 (2 groups)', '11 (2 группы)'],
     ['printSize', '11.11 × 6.94 in', '11.11 × 6.94 дюйм.'],
     ['resolution', '300 dpi', '300 пикс./дюйм'],
     ['subfile', 'reduced resolution', 'уменьшенное разрешение'],
@@ -204,4 +204,92 @@ test('No HEVC decoder: a plain message naming the codec, and a hint for HEVC onl
     assert.equal(errorHint(t, 'no-video-decoder', 'AV1'), '')
     assert.equal(errorHint(t, 'decode-failed', 'HEVC'), '')
   }
+})
+
+test('Thumbnails: a new version of the file drops the thumbnails of the old one', async () => {
+  const { ThumbCache } = await import('../viewer/thumbs')
+  const cache = new ThumbCache<string>()
+  cache.set(1, 0, 'red page 1')
+  cache.set(1, 1, 'green page 2')
+  assert.equal(cache.get(1, 1), 'green page 2')
+  // Orca sends the file again after an outside write: the same ids, another generation.
+  assert.equal(cache.get(2, 0), undefined)
+  assert.equal(cache.get(2, 1), undefined)
+  assert.equal(cache.size, 0)
+  cache.set(2, 0, 'yellow page 1')
+  assert.equal(cache.get(2, 0), 'yellow page 1')
+})
+
+test('Tone controls: 8-bit images get levels, Auto contrast and reset; exposure only past 8-bit display values', () => {
+  const u8 = raster(2, 1, 3, 'u8', new Uint8Array(6))
+  assert.deepEqual(toneControls(u8), { exposure: false, curve: false, auto: 'contrast' })
+  const u16 = raster(2, 1, 3, 'u16', new Uint16Array(6))
+  assert.deepEqual(toneControls(u16), { exposure: true, curve: false, auto: 'contrast' })
+  const hdr = raster(2, 1, 3, 'f32', new Float32Array(6), { transfer: 'linear' })
+  assert.deepEqual(toneControls(hdr), { exposure: true, curve: true, auto: 'exposure' })
+  const dem = raster(2, 1, 1, 'f32', new Float32Array(2), { transfer: 'data' })
+  assert.deepEqual(toneControls(dem), { exposure: false, curve: false, auto: 'contrast' })
+  // Auto contrast on an 8-bit image renders with stretched levels.
+  const ramp = raster(3, 1, 1, 'u8', Uint8Array.from([50, 125, 200]))
+  const out = new Uint8ClampedArray(12)
+  renderRegion(ramp, autoTone(ramp, DEFAULT_TONE), 0, 0, 3, 1, out)
+  assert.deepEqual([out[0], out[8]], [0, 255])
+})
+
+test('Overview: boxes stay inside the image when one side is shorter than the factor', () => {
+  // 1 × 1000: the factor is 100, so each output pixel averages 100 rows of the one column.
+  const tall = raster(1, 1000, 1, 'u8', Uint8Array.from({ length: 1000 }, (_, i) => (i < 500 ? 0 : 255)))
+  const o = overview(tall, 10)
+  assert.deepEqual([o.raster.width, o.raster.height], [1, 10])
+  assert.deepEqual(Array.from(o.raster.data), [0, 0, 0, 0, 0, 1, 1, 1, 1, 1])
+  // A million-row strip finishes in about the time of its pixel count, not factor² per pixel.
+  const strip = raster(1, 1 << 20, 1, 'u8', new Uint8Array(1 << 20).fill(9))
+  const started = Date.now()
+  overview(strip, 88)
+  assert.ok(Date.now() - started < 2000, 'linear in the pixel count')
+})
+
+test('Errors: only a failed allocation is "too large", and a missing detail leaves no empty parenthesis', async () => {
+  const { serializeError } = await import('./protocol')
+  const { ImageError } = await import('./errors')
+  const { describeError, stringsFor } = await import('../i18n')
+  assert.equal(serializeError(new RangeError('Array buffer allocation failed')).code, 'too-large')
+  assert.equal(serializeError(new RangeError('Invalid typed array length: 4294967296')).code, 'too-large')
+  assert.equal(serializeError(new RangeError('Maximum call stack size exceeded')).code, 'decode-failed')
+  const en = stringsFor('en')
+  const ru = stringsFor('ru')
+  assert.equal(describeError(new ImageError('too-large'), en), 'The image is too large to decode in a tab.')
+  assert.equal(describeError(new ImageError('too-large'), ru), 'Изображение слишком большое для вкладки.')
+  assert.equal(describeError(new ImageError('too-large', '130,000'), en), 'The image is too large to decode in a tab (130,000 pixels).')
+  assert.equal(describeError(new ImageError('decode-failed'), en), 'The image data could not be decoded.')
+  assert.equal(describeError(new ImageError('damaged'), en), 'The file is damaged.')
+})
+
+test('Translations: only the tables’ own entries, and text from the file is never translated', async () => {
+  const { infoValue, label, sectionTitle, stringsFor, valueText } = await import('../i18n')
+  for (const t of [stringsFor('en'), stringsFor('ru')]) {
+    for (const word of ['constructor', 'toString', '__proto__', 'hasOwnProperty', 'valueOf']) {
+      assert.equal(valueText(t, word), word)
+      assert.equal(infoValue(t, 'description', word), word)
+      assert.equal(infoValue(t, 'colorMode', word), word)
+      assert.equal(label(t, word), word)
+      assert.equal(sectionTitle(t, word), word)
+    }
+  }
+  const ru = stringsFor('ru')
+  // A layer named like a blend mode or a layer kind keeps its name; the blend mode itself is translated.
+  assert.equal(infoValue(ru, 'name', 'Overlay'), 'Overlay')
+  assert.equal(infoValue(ru, 'name', 'Text'), 'Text')
+  assert.equal(infoValue(ru, 'artist', 'Normal'), 'Normal')
+  assert.equal(infoValue(ru, 'blend', 'Overlay'), 'Перекрытие')
+})
+
+test('Text file: the hint names the view toggle’s Source button as Orca labels it in each language', async () => {
+  const { describeError, stringsFor } = await import('../i18n')
+  const { ImageError } = await import('./errors')
+  assert.ok(describeError(new ImageError('text-file'), stringsFor('en')).includes('Switch to Source in the view toggle'))
+  // Orca's Russian UI calls the toggle's Source button «Исходный текст».
+  const ru = describeError(new ImageError('text-file'), stringsFor('ru'))
+  assert.ok(ru.includes('«Исходный текст»'), ru)
+  assert.ok(!/Source/.test(ru))
 })

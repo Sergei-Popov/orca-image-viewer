@@ -25,6 +25,8 @@ export interface ExrPartSpec {
   value: (channel: number, x: number, y: number, level: number) => number
   compression?: 0 | 1 | 2 | 3 | 5
   tiles?: { w: number; h: number; mipmap?: boolean }
+  /** A `chunkCount` attribute other than the real one (damaged headers). */
+  chunkCount?: number
 }
 
 /** zlib through Node's (and the browser's) CompressionStream. */
@@ -150,7 +152,8 @@ function levelSizes(part: ExrPartSpec): { w: number; h: number }[] {
   return out
 }
 
-export async function exr(spec: ExrPartSpec | ExrPartSpec[]): Promise<Uint8Array> {
+/** `headersOnly` stops after the headers, before the offset tables and chunks. */
+export async function exr(spec: ExrPartSpec | ExrPartSpec[], options: { headersOnly?: boolean } = {}): Promise<Uint8Array> {
   const parts = Array.isArray(spec) ? spec : [spec]
   const multipart = parts.length > 1
   const w = new ByteWriter(true)
@@ -213,11 +216,12 @@ export async function exr(spec: ExrPartSpec | ExrPartSpec[]): Promise<Uint8Array
     if (multipart) {
       attr(w, 'name', 'string', new TextEncoder().encode(part.name ?? `part${pi}`))
       attr(w, 'type', 'string', new TextEncoder().encode(part.tiles ? 'tiledimage' : 'scanlineimage'))
-      attr(w, 'chunkCount', 'int', new ByteWriter(true).i32(list.length).done())
     }
+    if (multipart || part.chunkCount !== undefined) attr(w, 'chunkCount', 'int', new ByteWriter(true).i32(part.chunkCount ?? list.length).done())
     w.u8(0)
   }
   if (multipart) w.u8(0)
+  if (options.headersOnly) return w.done()
 
   // Offset tables, then the chunks.
   const tableAt = w.length

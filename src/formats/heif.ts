@@ -8,6 +8,7 @@ import { checkSize, damaged, ImageError } from '../core/errors'
 import type { Decoded, ImageDesc, InfoItem, InfoSection, Notice, Platform, Raster, VideoColor } from '../core/model'
 import { raster } from '../core/model'
 import { orient } from '../core/pixels'
+import { plural } from '../core/plural'
 import { exifFromBlock } from '../meta/exif'
 import { iccItems, readIcc } from '../meta/icc'
 import { xmpSection } from '../meta/xmp'
@@ -428,7 +429,7 @@ export async function openHeif(bytes: Uint8Array, platform: Platform): Promise<D
   if (primary.type === 'grid') {
     const g = gridOf(heif, primary)
     const tile = coded[0] ? itemSize(heif, coded[0]) : { width: 0, height: 0 }
-    imageItems.push({ key: 'grid', value: `${g.columns} × ${g.rows} tiles of ${tile.width} × ${tile.height}` })
+    imageItems.push({ key: 'grid', value: `${g.columns} × ${g.rows} ${plural('en', g.columns * g.rows, { one: 'tile', other: 'tiles' })} of ${tile.width} × ${tile.height}` })
   }
   if (transforms.length) imageItems.push({ key: 'rotation', value: transforms.join(', ') + ' CCW' })
   if (mirrored) imageItems.push({ key: 'mirror', value: 'Yes' })
@@ -446,7 +447,7 @@ export async function openHeif(bytes: Uint8Array, platform: Platform): Promise<D
   const decoder = platform.decodeVideo
   const images: ImageDesc[] = entries.map((e, i) => {
     const s = displaySize(heif, e.item)
-    return { id: i, width: s.width, height: s.height, at: [i], label: e.label, info: [{ key: 'type', value: e.item.type }] }
+    return { id: i, width: s.width, height: s.height, at: [i], label: e.label, info: [{ key: 'type', value: e.item.type, mono: true }] }
   })
 
   async function decodeItem(it: Item, luma: boolean, depth = 0): Promise<Raster> {
@@ -511,6 +512,8 @@ export async function openHeif(bytes: Uint8Array, platform: Platform): Promise<D
       throw new ImageError('no-video-decoder', kind === 'hvc1' ? 'HEVC' : 'AV1')
     }
     const sizes = list.map((it) => itemSize(heif, it))
+    // Sizes come from the file's ispe boxes: check them before the decoder makes frames that big.
+    for (const s of sizes) if (s.width && s.height) checkSize(s.width, s.height, 4)
     const color = colourOf(heif, list).color
     const data = await decoder.decode(
       codecName,

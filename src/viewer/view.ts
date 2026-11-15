@@ -8,7 +8,7 @@ import type { DocDesc, ImageDesc, InfoSection, LayerDesc, Raster } from '../core
 import { encodePng } from '../core/png'
 import type { Thumbnail } from '../core/protocol'
 import { append, h, svg } from '../dom'
-import { errorDetail, errorHint, fill, formatSize, imageText, infoValue, label, type Strings, valueText } from '../i18n'
+import { describeError, errorHint, fill, formatSize, imageText, infoValue, label, sectionTitle, type Strings, valueText } from '../i18n'
 import { icon, type IconName } from '../icons'
 import {
   autoTone,
@@ -16,12 +16,13 @@ import {
   formatFloat,
   histogram,
   initialTone,
-  isHighRange,
   pixelValues,
   renderRegion,
   type Tone,
+  toneControls,
   type ToneMap
 } from './tone'
+import { ThumbCache } from './thumbs'
 import { Viewport } from './viewport'
 
 type SaveAs = (options: { suggestedName?: string; mimeType?: string; data: ArrayBuffer }) => Promise<{ status: 'saved' | 'cancelled' }>
@@ -49,15 +50,6 @@ function storageSet(key: string, value: string): void {
   } catch {
     // Storage can be off in a frame; the preference just does not stick.
   }
-}
-
-export function describeError(error: unknown, t: Strings): string {
-  if (error instanceof ImageError) {
-    const template = (t.errors as Record<string, string>)[error.code] ?? t.errors['decode-failed']
-    const detail = errorDetail(t, error.detail) || (error.code === 'damaged' ? '…' : '')
-    return fill(template, { detail }).replace(' ()', '').replace(' (…)', '')
-  }
-  return fill(t.errors['decode-failed'], { detail: error instanceof Error ? error.message : String(error) })
 }
 
 /** Layer kinds as shown; the values table translates them. */
@@ -181,6 +173,10 @@ export class ImageView {
   /** Opens new file bytes; earlier documents are dropped. */
   async open(bytes: ArrayBuffer, fileType: string | undefined): Promise<void> {
     const generation = ++this.generation
+    // Thumbnails of the previous version are dropped with their generation; boxes still waiting
+    // to be seen belong to the old list.
+    this.thumbObserver?.disconnect()
+    this.thumbObserver = null
     this.client?.dispose()
     const client = new DecoderClient()
     this.client = client
@@ -386,9 +382,10 @@ export class ImageView {
     const r = this.raster
     const tone = this.tone
     this.toneGroup.replaceChildren()
-    if (!r || !tone || !isHighRange(r)) return
+    if (!r || !tone) return
     const t = this.t
-    if (r.transfer !== 'data') {
+    const controls = toneControls(r)
+    if (controls.exposure) {
       const range = h('input', {
         type: 'range',
         className: 'iv-range',
@@ -407,7 +404,7 @@ export class ImageView {
       })
       this.toneGroup.append(h('label', { className: 'iv-field', title: t.exposureHint }, svg(icon('sun')), range), ev)
     }
-    if (r.transfer === 'linear') {
+    if (controls.curve) {
       const select = h('select', { className: 'iv-select', 'aria-label': t.toneMap, title: t.toneMapHint })
       for (const m of ['aces', 'reinhard', 'clip'] as ToneMap[]) select.append(h('option', { value: m }, t.toneMaps[m]))
       select.value = tone.map
@@ -419,7 +416,7 @@ export class ImageView {
       const hi = r.transfer === 'data' ? formatFloat(tone.white) : String(Math.round(tone.white * 1000) / 1000)
       this.toneGroup.append(h('span', { className: 'iv-field' }, `${t.levels} ${lo} – ${hi}`))
     }
-    const auto = this.textButton(t.auto, r.transfer === 'linear' ? t.autoExposureHint : t.autoContrastHint, () => {
+    const auto = this.textButton(t.auto, controls.auto === 'exposure' ? t.autoExposureHint : t.autoContrastHint, () => {
       if (!this.raster || !this.tone) return
       this.applyTone(autoTone(this.raster, this.tone))
       this.buildTone()
@@ -440,7 +437,7 @@ export class ImageView {
 
   private nudgeExposure(delta: number): void {
     const r = this.raster
-    if (!r || !this.tone || !isHighRange(r) || r.transfer === 'data') return
+    if (!r || !this.tone || !toneControls(r).exposure) return
     this.applyTone({ ...this.tone, exposure: Math.max(-10, Math.min(10, Math.round((this.tone.exposure + delta) * 10) / 10)) })
     this.buildTone()
   }
@@ -548,6 +545,8 @@ export class ImageView {
     if (key === 'size') return this.t.labels.sizes
     if (key === 'mip') return this.t.labels.mipmaps
     if (key === 'face') return this.t.labels.faces
+    if (key === 'part') return this.t.labels.parts
+    if (key === 'layer') return this.t.labels.layers
     return this.t.tabs.list
   }
 
@@ -590,14 +589,18 @@ export class ImageView {
 
   private section(s: InfoSection, top?: HTMLElement): HTMLElement {
     const t = this.t
-    const title = (t.sections as Record<string, string>)[s.title] ?? s.title
+    const title = sectionTitle(t, s.title)
     const dl = h('dl', { className: `iv-meta${s.raw ? ' iv-raw' : ''}` })
     const limit = 40
     const add = (items: typeof s.items) => {
       for (const item of items) {
+        // Raw sections (EXIF, XMP, EXR attributes, maker notes) show names as stored, and values
+        // too unless the reader wrote them (named values, byte counts).
         const key = s.raw ? item.key : label(t, item.key)
         const value = s.raw
-          ? valueText(t, item.value)
+          ? item.term
+            ? infoValue(t, item.key, item.value)
+            : item.value
           : item.key === 'fileSize' && /^\d+$/.test(item.value)
             ? formatSize(Number(item.value), this.locale, t.units)
             : infoValue(t, item.key, item.value)
@@ -776,11 +779,11 @@ export class ImageView {
     else if (this.tab === 'layers') this.renderLayers()
   }
 
-  private thumbCache = new Map<number, Thumbnail | 'failed'>()
+  private readonly thumbs = new ThumbCache<Thumbnail | 'failed'>()
 
   private thumbBox(image: number, fallback: IconName): HTMLElement {
     const box = h('span', { className: 'iv-thumb' })
-    const cached = this.thumbCache.get(image)
+    const cached = this.thumbs.get(this.generation, image)
     const paint = (thumb: Thumbnail | 'failed') => {
       if (thumb === 'failed') {
         box.classList.add('iv-plain')
@@ -816,13 +819,13 @@ export class ImageView {
       client.thumbnail(image, THUMB).then(
         (thumb) => {
           if (generation !== this.generation) return
-          this.thumbCache.set(image, thumb)
+          this.thumbs.set(generation, image, thumb)
           box.classList.remove('iv-plain')
           paint(thumb)
         },
         () => {
           if (generation !== this.generation) return
-          this.thumbCache.set(image, 'failed')
+          this.thumbs.set(generation, image, 'failed')
           paint('failed')
         }
       )

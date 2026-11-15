@@ -1,5 +1,12 @@
 // UI strings in English and Russian; Orca's UI language picks one (`orca.locale`). Info labels
 // are looked up by key; EXIF and XMP tag names stay as their standard names in both languages.
+// Only text the decoders write is translated: names and text from the file stay as they are.
+
+import { ImageError } from './core/errors'
+import { plural } from './core/plural'
+
+/** A rewrite of an info value: a replacement string, or a function of the named groups. */
+export type Rule = [RegExp, string | ((groups: Record<string, string>) => string)]
 
 const en = {
   loading: 'Opening the image…',
@@ -33,7 +40,7 @@ const en = {
     'cmyk-converted': 'CMYK shown as RGB with a simple conversion, without the colour profile.',
     'lab-converted': 'CIELAB converted to sRGB.',
     'ycc-converted': 'YCbCr converted to RGB.',
-    'exr-multipart': 'A multi-part file: pick a part in the toolbar.',
+    'exr-multipart': 'A multi-part file: pick a part in the toolbar or in the Parts list.',
     'unsupported-images': 'Some images in this file cannot be decoded: {detail}.'
   },
   axes: {
@@ -226,62 +233,8 @@ const en = {
     profile: 'Profile',
     printSize: 'Print size'
   },
-  values: {
-    None: 'None',
-    Yes: 'Yes',
-    No: 'No',
-    Grey: 'Grey',
-    'Grey + alpha': 'Grey + alpha',
-    Linear: 'Linear',
-    Normal: 'Normal',
-    Hidden: 'Hidden',
-    Visible: 'Visible',
-    Unsupported: 'Unsupported',
-    Straight: 'Straight',
-    Premultiplied: 'Premultiplied',
-    Opaque: 'Opaque',
-    Custom: 'Custom',
-    Legacy: 'Legacy',
-    'Lossless JPEG': 'Lossless JPEG',
-    'Not saved (composited from layers)': 'Not saved (composited from layers)',
-    'Missing, the file is cut off (composited from layers)': 'Missing, the file is cut off (composited from layers)',
-    Packed: 'Packed',
-    // Layer kinds and blend modes.
-    'Pass through': 'Pass through',
-    Dissolve: 'Dissolve',
-    Darken: 'Darken',
-    Multiply: 'Multiply',
-    'Colour burn': 'Colour burn',
-    'Linear burn': 'Linear burn',
-    'Darker colour': 'Darker colour',
-    Lighten: 'Lighten',
-    Screen: 'Screen',
-    'Colour dodge': 'Colour dodge',
-    'Linear dodge (add)': 'Linear dodge (add)',
-    'Lighter colour': 'Lighter colour',
-    Overlay: 'Overlay',
-    'Soft light': 'Soft light',
-    'Hard light': 'Hard light',
-    'Vivid light': 'Vivid light',
-    'Linear light': 'Linear light',
-    'Pin light': 'Pin light',
-    'Hard mix': 'Hard mix',
-    Difference: 'Difference',
-    Exclusion: 'Exclusion',
-    Subtract: 'Subtract',
-    Divide: 'Divide',
-    Hue: 'Hue',
-    Saturation: 'Saturation',
-    Colour: 'Colour',
-    Luminosity: 'Luminosity',
-    Pixels: 'Pixels',
-    Group: 'Group',
-    Text: 'Text',
-    Adjustment: 'Adjustment',
-    'Smart object': 'Smart object',
-    Fill: 'Fill',
-    Empty: 'Empty'
-  },
+  /** Whole values the readers write, by their English text; English values are shown as made. */
+  values: {} as Record<string, string>,
   imageLabels: {
     page: 'Page {n}',
     pageReduced: 'Page {n} (reduced)',
@@ -316,7 +269,10 @@ const en = {
     compression: '{name} compression'
   },
   /** Rewrites of info values by key (units, flash modes); English values are shown as made. */
-  valueRules: {} as Record<string, [RegExp, string][]>,
+  valueRules: {
+    // Any key: byte counts in the UI language's number format.
+    '*': [[/(?<n>\d+) bytes$/, (g) => `${Number(g.n).toLocaleString('en')} ${plural('en', Number(g.n), { one: 'byte', other: 'bytes' })}`]]
+  } as Record<string, Rule[]>,
   /** Error details: whole phrases, then patterns, then the parts of "<format> <part>". */
   errorDetails: {} as Record<string, string>,
   errorRules: [] as [RegExp, string][],
@@ -325,6 +281,22 @@ const en = {
 }
 
 export type Strings = typeof en
+
+const RU_FLASH: Rule[] = [
+  [/Did not fire/, 'Не сработала'],
+  [/Fired/, 'Сработала'],
+  [/compulsory/, 'принудительно'],
+  [/\boff\b/, 'выключена'],
+  [/\bauto\b/, 'авто'],
+  [/red-eye reduction/, 'подавление красных глаз'],
+  [/no flash function/, 'вспышки нет']
+]
+
+/** "3 плитки", "5 плиток", "1 234 байта": a count in Russian number format with its plural form. */
+function ruCount(n: string, one: string, few: string, many: string): string {
+  const v = Number(n)
+  return `${v.toLocaleString('ru')} ${plural('ru', v, { one, few, many, other: few })}`
+}
 
 const ru: Strings = {
   loading: 'Открываю изображение…',
@@ -346,7 +318,7 @@ const ru: Strings = {
     'no-decoder': 'В этой Orca нет декодера для {detail}.',
     'no-video-decoder': 'На этом компьютере нет декодера {detail}, доступного Orca, поэтому картинку не показать.',
     'decode-failed': 'Не удалось декодировать данные изображения ({detail}).',
-    'text-file': 'Это текстовый файл, а не изображение. Чтобы его прочитать, переключитесь на Source.'
+    'text-file': 'Это текстовый файл, а не изображение. Чтобы его прочитать, выберите «Исходный текст» в переключателе вида.'
   },
   notices: {
     'raw-preview': 'Camera RAW: показано самое большое превью, встроенное камерой ({detail}), а не проявка данных сенсора.',
@@ -357,7 +329,7 @@ const ru: Strings = {
     'cmyk-converted': 'CMYK показан как RGB простым пересчётом, без цветового профиля.',
     'lab-converted': 'CIELAB пересчитан в sRGB.',
     'ycc-converted': 'YCbCr пересчитан в RGB.',
-    'exr-multipart': 'Файл из нескольких частей: выберите часть на панели.',
+    'exr-multipart': 'Файл из нескольких частей: выберите часть на панели инструментов или в списке «Части».',
     'unsupported-images': 'Некоторые изображения в файле не декодируются: {detail}.'
   },
   axes: {
@@ -603,7 +575,165 @@ const ru: Strings = {
     Adjustment: 'Коррекция',
     'Smart object': 'Смарт-объект',
     Fill: 'Заливка',
-    Empty: 'Пустой'
+    Empty: 'Пустой',
+    // TIFF
+    'Grey (white is zero)': 'Серый (белый — ноль)',
+    Palette: 'Палитра',
+    'Transparency mask': 'Маска прозрачности',
+    'Separated (CMYK)': 'Цветоделение (CMYK)',
+    'Colour filter array': 'Мозаика цветных фильтров',
+    'Linear raw': 'Линейные данные сенсора',
+    'Horizontal differencing': 'Горизонтальные разности',
+    'Floating point': 'С плавающей точкой',
+    'Separate planes': 'Отдельные плоскости',
+    'Chunky (interleaved)': 'Вперемешку в каждом пикселе',
+    'Little-endian (II)': 'От младшего байта (II)',
+    'Big-endian (MM)': 'От старшего байта (MM)',
+    'Classic TIFF': 'Обычный TIFF',
+    'CCITT modified Huffman RLE': 'CCITT, модифицированный код Хаффмана',
+    'CCITT Group 3 fax': 'CCITT, факс группы 3',
+    'CCITT Group 4 fax': 'CCITT, факс группы 4',
+    'JPEG (old-style)': 'JPEG (старый вариант)',
+    'JPEG (lossy DNG)': 'JPEG (DNG с потерями)',
+    'IT8 CT padding': 'IT8, заполнение CT',
+    'IT8 line work RLE': 'IT8, штриховая графика RLE',
+    'IT8 monochrome': 'IT8, монохромное',
+    'IT8 binary line art': 'IT8, двухцветная штриховая графика',
+    'Pixar film': 'Pixar, плёночное',
+    'Pixar log': 'Pixar, логарифмическое',
+    'Mirrored horizontally': 'Отражено по горизонтали',
+    'Mirrored vertically': 'Отражено по вертикали',
+    'Rotated 180°': 'Повёрнуто на 180°',
+    'Rotated 90° CW': 'Повёрнуто на 90° по часовой стрелке',
+    'Rotated 90° CCW': 'Повёрнуто на 90° против часовой стрелки',
+    'Mirrored, rotated 90° CW': 'Отражено и повёрнуто на 90° по часовой стрелке',
+    'Mirrored, rotated 90° CCW': 'Отражено и повёрнуто на 90° против часовой стрелки',
+    // PSD
+    Bitmap: 'Битовый',
+    Greyscale: 'Градации серого',
+    Indexed: 'Индексированные цвета',
+    Multichannel: 'Многоканальный',
+    Duotone: 'Дуплекс',
+    Raw: 'Без сжатия',
+    'ZIP with prediction': 'ZIP с предсказанием',
+    'PSB (large document)': 'PSB (большой документ)',
+    // TGA
+    'Colour-mapped': 'С палитрой',
+    'True colour': 'Полноцветный',
+    'Colour-mapped, RLE': 'С палитрой, RLE',
+    'True colour, RLE': 'Полноцветный, RLE',
+    'Greyscale, RLE': 'Градации серого, RLE',
+    'Top-left': 'Сверху слева',
+    'Top-right': 'Сверху справа',
+    'Bottom-left': 'Снизу слева',
+    'Bottom-right': 'Снизу справа',
+    'Undefined (ignored)': 'Не задана (не учитывается)',
+    'Undefined (kept)': 'Не задана (сохраняется)',
+    Alpha: 'Альфа',
+    'Premultiplied alpha': 'Предумноженная альфа',
+    // Radiance HDR, HEIF, DDS, OpenEXR
+    'RGBE (shared exponent)': 'RGBE (общий порядок)',
+    'XYZE (shown as linear sRGB)': 'XYZE (показан как линейный sRGB)',
+    'YCbCr + alpha': 'YCbCr + альфа',
+    Depth: 'Глубина',
+    'Portrait matte': 'Маска портрета',
+    'Skin matte': 'Маска кожи',
+    'Hair matte': 'Маска волос',
+    'Teeth matte': 'Маска зубов',
+    'Glasses matte': 'Маска очков',
+    'Sky matte': 'Маска неба',
+    Auxiliary: 'Вспомогательное',
+    'Increasing Y': 'По возрастанию Y',
+    'Decreasing Y': 'По убыванию Y',
+    'Random Y': 'В любом порядке',
+    'Latitude-longitude': 'Широта и долгота',
+    Cube: 'Куб',
+    // EXIF named values
+    inches: 'дюймы',
+    cm: 'см',
+    mm: 'мм',
+    µm: 'мкм',
+    Centered: 'По центру',
+    'Co-sited': 'Совмещённое',
+    'Not defined': 'Не задано',
+    Manual: 'Вручную',
+    'Program AE': 'Программная автоэкспозиция',
+    'Aperture priority': 'Приоритет диафрагмы',
+    'Shutter priority': 'Приоритет выдержки',
+    Creative: 'Творческая',
+    Action: 'Движение',
+    Portrait: 'Портрет',
+    Landscape: 'Пейзаж',
+    Bulb: 'Ручная выдержка (Bulb)',
+    Unknown: 'Неизвестно',
+    Average: 'Среднее',
+    'Center-weighted average': 'Центровзвешенный',
+    Spot: 'Точечный',
+    'Multi-spot': 'Многоточечный',
+    'Multi-segment': 'Матричный',
+    Partial: 'Частичный',
+    Other: 'Другое',
+    Daylight: 'Дневной свет',
+    Fluorescent: 'Лампа дневного света',
+    Tungsten: 'Лампа накаливания',
+    Flash: 'Вспышка',
+    'Fine weather': 'Ясная погода',
+    Cloudy: 'Облачно',
+    Shade: 'Тень',
+    'Daylight fluorescent': 'Люминесцентная, дневной свет',
+    'Day white fluorescent': 'Люминесцентная, дневной белый',
+    'Cool white fluorescent': 'Люминесцентная, холодный белый',
+    'White fluorescent': 'Люминесцентная, белый',
+    'Standard light A': 'Стандартный источник A',
+    'Standard light B': 'Стандартный источник B',
+    'Standard light C': 'Стандартный источник C',
+    'ISO studio tungsten': 'Студийная лампа накаливания ISO',
+    Uncalibrated: 'Не откалибровано',
+    'ICC Profile': 'Профиль ICC',
+    'One-chip color area': 'Однокристальный цветной сенсор',
+    'Two-chip color area': 'Двухкристальный цветной сенсор',
+    'Three-chip color area': 'Трёхкристальный цветной сенсор',
+    'Color sequential area': 'Последовательный цветной сенсор',
+    Trilinear: 'Трилинейный',
+    'Color sequential linear': 'Последовательный линейный',
+    'HDR (no original saved)': 'HDR (без исходного снимка)',
+    'HDR (original saved)': 'HDR (исходный снимок сохранён)',
+    'Original (for HDR)': 'Исходный снимок (для HDR)',
+    Panorama: 'Панорама',
+    'Portrait HDR': 'Портрет HDR',
+    Auto: 'Авто',
+    'Auto bracket': 'Автобрекетинг',
+    Standard: 'Стандартная',
+    Night: 'Ночная',
+    'Low gain up': 'Слабое усиление',
+    'High gain up': 'Сильное усиление',
+    'Low gain down': 'Слабое ослабление',
+    'High gain down': 'Сильное ослабление',
+    Low: 'Низкий',
+    High: 'Высокий',
+    Soft: 'Мягкая',
+    Hard: 'Жёсткая',
+    Macro: 'Макро',
+    Close: 'Близко',
+    Distant: 'Далеко',
+    'Standard output sensitivity': 'Стандартная выходная чувствительность (SOS)',
+    'Recommended exposure index': 'Рекомендуемый индекс экспозиции (REI)',
+    'ISO speed': 'Светочувствительность ISO',
+    'SOS and REI': 'SOS и REI',
+    'SOS and ISO speed': 'SOS и ISO',
+    'REI and ISO speed': 'REI и ISO',
+    'SOS, REI and ISO speed': 'SOS, REI и ISO',
+    'Film scanner': 'Плёночный сканер',
+    'Reflection print scanner': 'Сканер отпечатков',
+    'Digital camera': 'Цифровая камера',
+    'Directly photographed': 'Снято напрямую',
+    'Not a composite': 'Не составное',
+    'General composite': 'Составное',
+    'Composite captured when shooting': 'Составное, собрано при съёмке',
+    'Above sea level': 'Выше уровня моря',
+    'Below sea level': 'Ниже уровня моря',
+    'No correction': 'Без коррекции',
+    'Differential corrected': 'Дифференциальная коррекция'
   },
   imageLabels: {
     page: 'Страница {n}',
@@ -738,15 +868,8 @@ const ru: Strings = {
       [/^(?<f>[\d.]+) mm \(35 mm equivalent: (?<e>\d+) mm\)$/, '$<f> мм (в пересчёте на 35 мм: $<e> мм)'],
       [/^(?<f>[\d.]+) mm$/, '$<f> мм']
     ],
-    flash: [
-      [/Did not fire/, 'Не сработала'],
-      [/Fired/, 'Сработала'],
-      [/compulsory/, 'принудительно'],
-      [/\boff\b/, 'выключена'],
-      [/\bauto\b/, 'авто'],
-      [/red-eye reduction/, 'подавление красных глаз'],
-      [/no flash function/, 'вспышки нет']
-    ],
+    flash: RU_FLASH,
+    Flash: RU_FLASH,
     altitude: [[/ m$/, ' м']],
     latitude: [
       [/ N$/, ' с. ш.'],
@@ -757,7 +880,90 @@ const ru: Strings = {
       [/ W$/, ' з. д.']
     ],
     direction: [[/ magnetic$/, ' (магнитный)']],
-    layers: [[/\((?<n>\d+) groups?\)/, '(групп: $<n>)']],
+    layers: [[/\((?<n>\d+) groups?\)/, (g) => `(${ruCount(g.n, 'группа', 'группы', 'групп')})`]],
+    layout: [
+      [/^(?<n>\d+) strips? of (?<r>\d+) rows?$/, (g) => `${ruCount(g.n, 'полоса', 'полосы', 'полос')} по ${ruCount(g.r, 'строке', 'строки', 'строк')}`],
+      [/^(?<n>\d+) tiles? of (?<s>.+)$/, (g) => `${ruCount(g.n, 'плитка', 'плитки', 'плиток')} ${g.s}`]
+    ],
+    grid: [[/^(?<c>\d+) × (?<r>\d+) tiles? of (?<s>.+)$/, '$<c> × $<r>, плитки $<s>']],
+    pages: [[/\((?<n>\d+) images?\)/, (g) => `(${ruCount(g.n, 'изображение', 'изображения', 'изображений')})`]],
+    bitDepth: [
+      [/^(?<n>\d+)-bit$/, '$<n> бит'],
+      [/^(?<n>\d+) \(float\)$/, '$<n> (с плавающей точкой)'],
+      [/ float × /, ' с плавающей точкой × '],
+      [/ signed × /, ' со знаком × '],
+      [/\(colour map (?<n>\d+)\)/, '(палитра, $<n> бит)'],
+      // OpenEXR channel types.
+      [/\bhalf\b/g, '16 бит с плавающей точкой'],
+      [/\bfloat\b/g, '32 бит с плавающей точкой'],
+      [/\buint\b/g, '32 бит без знака']
+    ],
+    format: [
+      [/^(?<n>\d+)-bit$/, '$<n> бит'],
+      [/^Bump map (?<n>\d+)-bit$/, 'Карта рельефа, $<n> бит'],
+      [/^YUV (?<n>\d+)-bit$/, 'YUV, $<n> бит']
+    ],
+    compression: [
+      [/^code (?<n>\d+)$/, 'код $<n>'],
+      [/^JPEG, Baseline$/, 'JPEG, базовый'],
+      [/^JPEG, Extended sequential$/, 'JPEG, расширенный последовательный'],
+      [/^JPEG, Progressive$/, 'JPEG, прогрессивный'],
+      [/^JPEG, Lossless$/, 'JPEG без потерь'],
+      [/^JPEG, Arithmetic sequential$/, 'JPEG, арифметический последовательный'],
+      [/^JPEG, Arithmetic progressive$/, 'JPEG, арифметический прогрессивный'],
+      [/^JPEG, Arithmetic lossless$/, 'JPEG без потерь, арифметический']
+    ],
+    colorMode: [[/^Mode (?<n>\d+)$/, 'Режим $<n>']],
+    extraSamples: [
+      [/premultiplied alpha/g, 'предумноженная альфа'],
+      [/\balpha\b/g, 'альфа'],
+      [/unspecified/g, 'не указано']
+    ],
+    auxiliary: [
+      [/\bAlpha\b/g, 'Альфа'],
+      [/\bDepth\b/g, 'Глубина'],
+      [/Portrait matte/g, 'Маска портрета'],
+      [/Skin matte/g, 'Маска кожи'],
+      [/Hair matte/g, 'Маска волос'],
+      [/Teeth matte/g, 'Маска зубов'],
+      [/Glasses matte/g, 'Маска очков'],
+      [/Sky matte/g, 'Маска неба']
+    ],
+    rotation: [[/ CCW$/, ' против часовой стрелки']],
+    orientation: [[/^Normal$/, 'Обычная']],
+    Orientation: [[/^Normal$/, 'Обычная']],
+    iccDetails: [
+      [/· Display ·/, '· Монитор ·'],
+      [/· Input ·/, '· Устройство ввода ·'],
+      [/· Output ·/, '· Устройство вывода ·'],
+      [/· Device link ·/, '· Связь устройств ·'],
+      [/· Color space ·/, '· Цветовое пространство ·'],
+      [/· Abstract ·/, '· Абстрактный ·'],
+      [/· Named color ·/, '· Именованные цвета ·']
+    ],
+    // OpenEXR tile description (raw attribute and image detail).
+    tiles: [
+      [/, one level/, ', один уровень'],
+      [/, mipmap/, ', MIP-уровни'],
+      [/, ripmap/, ', RIP-уровни'],
+      [/, rounding up/, ', с округлением вверх'],
+      [/, rounding down/, ', с округлением вниз']
+    ],
+    // OpenEXR channel types in channel lists.
+    channels: [
+      [/\(half\)/g, '(16 бит)'],
+      [/\(float\)/g, '(32 бит)'],
+      [/\(uint\)/g, '(32 бит, целые)']
+    ],
+    // Any key, after the key's own rules: byte counts and units.
+    '*': [
+      [/(?<n>\d+) bytes$/, (g) => ruCount(g.n, 'байт', 'байта', 'байт')],
+      [/(?<n>\d) mm\b/g, '$<n> мм'],
+      [/(?<n>\d) m$/, '$<n> м'],
+      [/(?<n>\d) s$/, '$<n> с'],
+      [/^(?<n>[34]×[34]) matrix$/, 'матрица $<n>'],
+      [/ \(unreadable\)$/, ' (не читается)']
+    ],
     subfile: [
       [/reduced resolution/, 'уменьшенное разрешение'],
       [/page of a multi-page image/, 'страница многостраничного изображения'],
@@ -797,12 +1003,28 @@ export function fill(template: string, values: Record<string, string>): string {
   return template.replace(/\{(\w+)\}/g, (match, key: string) => values[key] ?? match)
 }
 
+/** An entry of the table itself, never an inherited one: file text can be "constructor". */
+export function own<T>(table: Record<string, T>, key: string): T | undefined {
+  return Object.hasOwn(table, key) ? table[key] : undefined
+}
+
 export function label(t: Strings, key: string): string {
-  return (t.labels as Record<string, string>)[key] ?? key
+  return own(t.labels as Record<string, string>, key) ?? key
+}
+
+export function sectionTitle(t: Strings, title: string): string {
+  return own(t.sections as Record<string, string>, title) ?? title
 }
 
 export function valueText(t: Strings, value: string): string {
-  return (t.values as Record<string, string>)[value] ?? value
+  return own(t.values as Record<string, string>, value) ?? value
+}
+
+/** Info keys whose values are text from the file (names, authors, notes): never translated. */
+const FILE_TEXT = new Set(['name', 'software', 'copyright', 'camera', 'serial', 'pageName', 'model', 'lens', 'job', 'description', 'comment', 'author', 'artist', 'iccProfile', 'imageId', 'noData', 'view'])
+
+export function isFileText(key: string): boolean {
+  return FILE_TEXT.has(key)
 }
 
 type LabelKey = keyof Strings['imageLabels']
@@ -860,28 +1082,45 @@ export function imageText(t: Strings, text: string): string {
     .join(' · ')
 }
 
-/** An info value in the UI language: whole known values, then the key's rewrite rules. */
-/** An error's detail in the UI language; English details are shown as made. */
 /** A second line under an error message, when there is something the user can check. */
 export function errorHint(t: Strings, code: string, detail: string): string {
   return code === 'no-video-decoder' && detail === 'HEVC' ? t.hevcHint : ''
 }
 
+/** An error's detail in the UI language; English details are shown as made. */
 export function errorDetail(t: Strings, detail: string): string {
-  const whole = t.errorDetails[detail]
+  const whole = own(t.errorDetails, detail)
   if (whole) return whole
   for (const [pattern, replacement] of t.errorRules) if (pattern.test(detail)) return detail.replace(pattern, replacement)
   const m = /^(TIFF|BigTIFF|PSD|EXR|DDS|ICNS|HEIF|TGA|QOI|Radiance|PIZ|B44|PXR24) (.+)$/.exec(detail)
-  const part = m && t.structureParts[m[2]]
+  const part = m && own(t.structureParts, m[2])
   if (m && part) return `${part} ${m[1]}`
   return detail
 }
 
+/** An error as one sentence; without a detail, the parenthesis that would hold it goes too. */
+export function describeError(error: unknown, t: Strings): string {
+  if (error instanceof ImageError) {
+    const template = own(t.errors as Record<string, string>, error.code) ?? t.errors['decode-failed']
+    const detail = errorDetail(t, error.detail)
+    return fill(detail ? template : template.replace(/\s*\([^()]*\{detail\}[^()]*\)/g, ''), { detail })
+  }
+  return fill(t.errors['decode-failed'], { detail: error instanceof Error ? error.message : String(error) })
+}
+
+/** An info value in the UI language: whole known values, then the key's rewrite rules. */
 export function infoValue(t: Strings, key: string, value: string): string {
-  const whole = valueText(t, value)
-  if (whole !== value) return whole
+  if (FILE_TEXT.has(key)) return value
+  let out = rewrite(own(t.valueRules, key), value)
+  if (out === value) out = valueText(t, value)
+  return rewrite(own(t.valueRules, '*'), out)
+}
+
+function rewrite(rules: Rule[] | undefined, value: string): string {
   let out = value
-  for (const [pattern, replacement] of t.valueRules[key] ?? []) out = out.replace(pattern, replacement)
+  for (const [pattern, replacement] of rules ?? []) {
+    out = typeof replacement === 'string' ? out.replace(pattern, replacement) : out.replace(pattern, (...args) => replacement(args[args.length - 1] as Record<string, string>))
+  }
   return out
 }
 

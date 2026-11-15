@@ -330,3 +330,51 @@ test('TIFF damaged and unsupported: short header, cut-off strip, no images, JPEG
     (e: unknown) => codeOf(e) === 'unsupported-pixels'
   )
 })
+
+test('TIFF without StripByteCounts: 130,000 one-row strips run to the next offset, found in sorted order', async () => {
+  const n = 130_000
+  const strips = Array.from({ length: n }, (_, i) => Uint8Array.of(i % 251))
+  const file = tiff([
+    {
+      entries: [
+        { tag: 256, type: 3, values: [1] },
+        { tag: 257, type: 4, values: [n] },
+        { tag: 258, type: 3, values: [8] },
+        { tag: 259, type: 3, values: [1] },
+        { tag: 262, type: 3, values: [1] },
+        { tag: 273, type: 4, data: strips },
+        { tag: 277, type: 3, values: [1] },
+        { tag: 278, type: 3, values: [1] }
+      ]
+    }
+  ])
+  const started = Date.now()
+  const doc = await openDocument(file, 'tif', platform)
+  const r = await doc.decode(0)
+  assert.ok(Date.now() - started < 3000, 'no quadratic search, no spread into Math.min')
+  assert.deepEqual([r.width, r.height], [1, n])
+  assert.deepEqual([r.data[0], r.data[1], r.data[250], r.data[251], r.data[n - 1]], [0, 1, 250, 0, (n - 1) % 251])
+})
+
+test('TIFF details in Russian: the readers’ wording is translated, plurals included', async () => {
+  const { englishLeft } = await import('../fixtures/russian')
+  const { infoValue, stringsFor } = await import('../i18n')
+  const one = (n: number) => new Uint8Array(n)
+  const pages = [
+    image({ width: 2, height: 1, spp: 5, photometric: 5, compression: 8, strips: [one(10)], extra: [{ tag: 284, type: 3, values: [2] }, { tag: 317, type: 3, values: [2] }, { tag: 338, type: 3, values: [2] }, { tag: 274, type: 3, values: [6] }] }),
+    image({ width: 16, height: 16, spp: 4, photometric: 2, compression: 5, tiles: { width: 16, height: 16, data: [one(1024)] }, extra: [{ tag: 338, type: 3, values: [1] }, { tag: 274, type: 3, values: [2] }] }),
+    image({ width: 4, height: 2, bps: 4, photometric: 3, compression: 32773, rowsPerStrip: 1, strips: [one(2), one(2)], extra: [{ tag: 320, type: 3, values: new Array(48).fill(0) }] }),
+    image({ width: 2, height: 1, bps: 32, photometric: 1, compression: 50000, strips: [one(8)], extra: [{ tag: 339, type: 3, values: [3] }, { tag: 317, type: 3, values: [3] }] }),
+    image({ width: 1, height: 1, bps: 16, photometric: 0, compression: 4, strips: [one(2)], extra: [{ tag: 339, type: 3, values: [2] }, { tag: 254, type: 4, values: [1] }] }),
+    image({ width: 1, height: 1, photometric: 32803, compression: 7, strips: [one(1)], extra: [{ tag: 254, type: 4, values: [4] }] }),
+    image({ width: 1, height: 1, photometric: 2, spp: 3, compression: 34925, strips: [one(3)], extra: [{ tag: 274, type: 3, values: [8] }] })
+  ]
+  const doc = await openDocument(tiff(pages), 'tif', platform)
+  assert.deepEqual(englishLeft(doc.desc), [])
+  const ru = stringsFor('ru')
+  const layouts = doc.desc.images.map((i) => i.info.find((x) => x.key === 'layout')?.value)
+  assert.deepEqual(layouts.slice(0, 3), ['1 strip of 1 row', '1 tile of 16 × 16', '2 strips of 1 row'])
+  assert.deepEqual(layouts.slice(0, 3).map((v) => infoValue(ru, 'layout', v ?? '')), ['1 полоса по 1 строке', '1 плитка 16 × 16', '2 полосы по 1 строке'])
+  assert.equal(infoValue(ru, 'layout', '25 strips of 5 rows'), '25 полос по 5 строк')
+  assert.equal(infoValue(ru, 'pages', '3 (21 images)'), '3 (21 изображение)')
+})

@@ -34,6 +34,18 @@ export function isHighRange(r: Raster): boolean {
   return r.transfer !== 'srgb' || r.kind !== 'u8'
 }
 
+/**
+ * The tone controls a raster gets. Every image has levels with Auto (contrast, or exposure for
+ * linear light) and a reset; exposure needs more than 8-bit display values; the curve, linear light.
+ */
+export function toneControls(r: Raster): { exposure: boolean; curve: boolean; auto: 'exposure' | 'contrast' } {
+  return {
+    exposure: isHighRange(r) && r.transfer !== 'data',
+    curve: r.transfer === 'linear',
+    auto: r.transfer === 'linear' ? 'exposure' : 'contrast'
+  }
+}
+
 export function eotf(v: number): number {
   return v <= 0.04045 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4)
 }
@@ -240,12 +252,15 @@ export function overview(r: Raster, maxSide: number): { raster: Raster; scale: n
   const sum = new Float64Array(c)
   const cnt = new Uint32Array(c)
   for (let y = 0; y < h; y++) {
+    // Boxes stay inside the image: a side shorter than the factor must not read into later rows.
+    const yEnd = Math.min((y + 1) * factor, r.height)
     for (let x = 0; x < w; x++) {
       sum.fill(0)
       cnt.fill(0)
-      for (let yy = y * factor; yy < (y + 1) * factor; yy++) {
+      const span = Math.min(factor, r.width - x * factor)
+      for (let yy = y * factor; yy < yEnd; yy++) {
         let s = (yy * r.width + x * factor) * c
-        for (let xx = 0; xx < factor; xx++, s += c) {
+        for (let xx = 0; xx < span; xx++, s += c) {
           for (let k = 0; k < c; k++) {
             const raw = r.data[s + k]
             const v = norm ? norm[raw] : raw

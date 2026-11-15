@@ -222,3 +222,18 @@ test('Radiance HDR damaged: cut-off scanlines are partial, a bad resolution line
     (e: unknown) => codeOf(e) === 'damaged'
   )
 })
+
+test('QOI, TGA and Radiance HDR details in Russian: the readers’ wording is translated', async () => {
+  const { englishLeft } = await import('../fixtures/russian')
+  const qoiFile = new ByteWriter(false).ascii('qoif').u32(1).u32(1).u8(4).u8(1).bytes([0xfe, 1, 2, 3]).zeros(7).u8(1).done()
+  const files: [Uint8Array, string][] = [
+    [qoiFile, 'qoi'],
+    [tga({ type: 10, width: 1, height: 1, depth: 32, descriptor: 0x28, data: [0x80, 1, 2, 3, 4] }, tgaExtension('', '', 4)), 'tga'],
+    [tga({ type: 9, width: 1, height: 1, depth: 8, map: { depth: 24, entries: [1, 2, 3] }, data: [0x80, 0] }, tgaExtension('', '', 3)), 'tga'],
+    [tga({ type: 11, width: 1, height: 1, depth: 8, descriptor: 0x10, data: [0x80, 7] }, tgaExtension('', '', 1)), 'tga'],
+    [tga({ type: 3, width: 1, height: 1, depth: 16, descriptor: 0x08, data: [7, 8] }, tgaExtension('', '', 2)), 'tga'],
+    [hdr(['FORMAT=32-bit_rle_rgbe', 'EXPOSURE=2'], '-Y 1 +X 1', [128, 64, 32, 129]), 'hdr'],
+    [hdr(['FORMAT=32-bit_rle_xyze'], '+Y 1 -X 1', [128, 64, 32, 129]), 'hdr']
+  ]
+  for (const [file, ext] of files) assert.deepEqual(englishLeft((await openDocument(file, ext, platform)).desc), [], ext)
+})

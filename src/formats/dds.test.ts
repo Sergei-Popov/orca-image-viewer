@@ -140,3 +140,49 @@ test('DDS damaged and unsupported: cut off, short header, YUY2', async () => {
   assert.equal(yuy2.desc.images[0].unsupported, 'YUY2')
   await assert.rejects(() => yuy2.decode(0), (e: unknown) => (e as { code?: string }).code === 'unsupported-pixels')
 })
+
+test('DDS damaged headers: array sizes and depths the file cannot hold are rejected before any image is built', async () => {
+  const damagedCount = (e: unknown) => (e as { code?: string; detail?: string }).code === 'damaged' && (e as { detail?: string }).detail === 'DDS image count'
+  // 4×4 RGBA8, a few bytes of data, and an array size from a damaged u32: headers only.
+  for (const arraySize of [30_000_000, 0xffffffff]) {
+    const started = Date.now()
+    await assert.rejects(() => open(dds({ width: 4, height: 4, dxgi: 28, arraySize, data: new Uint8Array(16) })), damagedCount)
+    assert.ok(Date.now() - started < 1000, `arraySize ${arraySize} is rejected at once`)
+  }
+  // A legacy volume texture with depth 0x7fffffff.
+  await assert.rejects(() => open(dds({ width: 4, height: 4, depth: 0x7fffffff, bits: 32, masks: [0xff, 0xff00, 0xff0000, 0xff000000], data: new Uint8Array(64) })), damagedCount)
+  // BC1: each surface needs at least one 8-byte block.
+  const block = bc1Block(rgb565(255, 0, 0), rgb565(255, 0, 0), new Array(16).fill(0))
+  const two = new ByteWriter(true).bytes(block).bytes(block).done()
+  assert.equal((await open(dds({ width: 4, height: 4, dxgi: 71, arraySize: 2, data: two }))).desc.images.length, 2)
+  await assert.rejects(() => open(dds({ width: 4, height: 4, dxgi: 71, arraySize: 3, data: two })), damagedCount)
+  // An absolute cap, even when the bytes would be there: 1×1 R8 with one byte per layer.
+  assert.equal((await open(dds({ width: 1, height: 1, dxgi: 61, arraySize: 8192, data: new Uint8Array(8192) }))).desc.images.length, 8192)
+  await assert.rejects(() => open(dds({ width: 1, height: 1, dxgi: 61, arraySize: 8193, data: new Uint8Array(8193) })), damagedCount)
+})
+
+test('DDS details in Russian: header kind, alpha mode and legacy formats translated', async () => {
+  const { englishLeft } = await import('../fixtures/russian')
+  const block = bc1Block(rgb565(255, 0, 0), rgb565(255, 0, 0), new Array(16).fill(0))
+  const files = [
+    dds({ width: 4, height: 4, dxgi: 71, arraySize: 2, data: new ByteWriter(true).bytes(block).bytes(block).done() }),
+    dds({ width: 4, height: 4, fourcc: 'DXT1', mips: 3, data: new ByteWriter(true).bytes(block).bytes(block).bytes(block).done() }),
+    dds({ width: 1, height: 1, bits: 32, masks: [0xff, 0xff00, 0xff0000, 0xff000000], cube: true, data: new Uint8Array(24) }),
+    dds({ width: 2, height: 2, depth: 2, bits: 8, pfFlags: 0x20000, masks: [0xff, 0, 0, 0], data: new Uint8Array(8) })
+  ]
+  for (const file of files) assert.deepEqual(englishLeft((await open(file)).desc), [])
+})
+
+test('DDS side list: cube faces or array layers at the chosen mip level, mip levels otherwise', async () => {
+  const rgba = (w: number, h: number, mips: number, surfaces: number) => {
+    let n = 0
+    for (let l = 0; l < mips; l++) n += Math.max(1, w >> l) * Math.max(1, h >> l)
+    return new Uint8Array(n * 4 * surfaces)
+  }
+  const cube = await open(dds({ width: 4, height: 4, mips: 3, dxgi: 28, cube: true, data: rgba(4, 4, 3, 6) }))
+  assert.equal(cube.desc.list, 'face')
+  const array = await open(dds({ width: 4, height: 4, mips: 3, dxgi: 28, arraySize: 4, data: rgba(4, 4, 3, 4) }))
+  assert.equal(array.desc.list, 'layer')
+  const mipped = await open(dds({ width: 4, height: 4, mips: 3, dxgi: 28, data: rgba(4, 4, 3, 1) }))
+  assert.equal(mipped.desc.list, 'mip')
+})

@@ -11,6 +11,7 @@ import { checkSize, damaged, ImageError, MAX_RASTER_BYTES, unsupportedPixels } f
 import type { Decoded, ImageDesc, InfoItem, InfoSection, LayerDesc, Notice, Platform, Raster, SampleKind, Samples } from '../core/model'
 import { allocate, raster } from '../core/model'
 import { cmykToRgb, labToRgb } from '../core/pixels'
+import { count as counted } from '../core/plural'
 import { exifFromBlock } from '../meta/exif'
 import { iccItems, readIcc } from '../meta/icc'
 import { xmpSection } from '../meta/xmp'
@@ -946,7 +947,7 @@ export async function openPsd(bytes: Uint8Array, platform: Platform): Promise<De
   }
   if (descs.length) {
     const groups = descs.filter((l) => l.kind === 'group').length
-    const groupText = groups ? ` (${groups} ${groups === 1 ? 'group' : 'groups'})` : ''
+    const groupText = groups ? ` (${counted(groups, 'group')})` : ''
     imageItems.push({ key: 'layers', value: String(descs.length - groups) + groupText })
   }
   if (hasImageData) {

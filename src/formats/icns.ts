@@ -185,7 +185,7 @@ export function openIcns(bytes: Uint8Array, platform: Platform): Decoded {
       label: `${s.entry.dark ? 'Dark · ' : ''}${s.w}×${s.h}${retina} · ${s.entry.type}`,
       unsupported: s.kind === 'jp2' ? 'JPEG 2000' : s.kind === 'unknown' ? `${s.entry.type} data` : undefined,
       info: [
-        { key: 'entry', value: s.entry.type },
+        { key: 'entry', value: s.entry.type, mono: true },
         { key: 'dimensions', value: `${s.w} × ${s.h}` },
         { key: 'format', value: what },
         { key: 'fileSize', value: String(s.entry.end - s.entry.start) }

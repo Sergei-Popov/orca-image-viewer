@@ -4,7 +4,7 @@
 import { browserPlatform } from './browser'
 import { type ErrorCode, ImageError } from './errors'
 import type { DocDesc, Raster } from './model'
-import { type Reply, type Request, Session, type Thumbnail } from './protocol'
+import { type Reply, type Request, serializeError, Session, type Thumbnail } from './protocol'
 
 type Pending = { resolve: (v: unknown) => void; reject: (e: unknown) => void }
 type Body = Request extends infer R ? (R extends { id: number } ? Omit<R, 'id'> : never) : never
@@ -80,10 +80,7 @@ export class DecoderClient {
     this.local ??= new Session(browserPlatform())
     this.local.handle(request).then(
       (value) => this.receive({ id: request.id, ok: true, value }),
-      (error) => {
-        const e = error instanceof ImageError ? error : new ImageError('decode-failed', '', String(error))
-        this.receive({ id: request.id, ok: false, code: e.code, detail: e.detail, message: e.message })
-      }
+      (error) => this.receive({ id: request.id, ok: false, ...serializeError(error) })
     )
   }
 

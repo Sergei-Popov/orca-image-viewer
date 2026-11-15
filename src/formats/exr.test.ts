@@ -193,3 +193,43 @@ function findAscii(bytes: Uint8Array, text: string): number {
   }
   return -1
 }
+
+test('EXR damaged headers: chunk counts across parts must fit in the file', async () => {
+  const tiny = (name: string, chunkCount: number): ExrPartSpec => ({ name, width: 1, height: 1, channels: [{ name: 'Y' }], value: () => 0.5, chunkCount })
+  const chunkCount = (e: unknown) => (e as { code?: string }).code === 'damaged' && (e as { detail?: string }).detail === 'EXR chunk count'
+  // 64 parts of 16 million chunks each, and no offset tables at all: headers only.
+  const many = await exr(
+    Array.from({ length: 64 }, (_, i) => tiny(`p${i}`, 16_000_000)),
+    { headersOnly: true }
+  )
+  const started = Date.now()
+  await assert.rejects(() => openDocument(many, 'exr', platform), chunkCount)
+  assert.ok(Date.now() - started < 1000, 'rejected at once')
+  // Small counts, but more table than file.
+  const short = new Uint8Array([...(await exr([tiny('a', 1000), tiny('b', 1000)], { headersOnly: true })), ...new Uint8Array(64)])
+  await assert.rejects(() => openDocument(short, 'exr', platform), chunkCount)
+  // The same parts with their real tables open.
+  const fine = await openDocument(await exr([tiny('a', 1), tiny('b', 1)]), 'exr', platform)
+  assert.equal(fine.desc.images.length, 2)
+})
+
+test('EXR details in Russian: channel types, tiles, line order and attributes translated', async () => {
+  const { englishLeft } = await import('../fixtures/russian')
+  const files = [
+    await exr(part({ compression: 3, tiles: { w: 16, h: 8, mipmap: true } })),
+    await exr({ width: 2, height: 2, channels: [{ name: 'id', type: 0 }, { name: 'Z', type: 2 }], value: () => 1 }),
+    await exr([part({ name: 'beauty', compression: 2 }), part({ name: 'aovs', compression: 5 })])
+  ]
+  for (const file of files) assert.deepEqual(englishLeft((await openDocument(file, 'exr', platform)).desc, ['id']), [])
+})
+
+test('EXR side list: parts, or layers of one part, at the chosen level; levels of a single image', async () => {
+  const multipart = await openDocument(await exr([part({ name: 'beauty' }), part({ name: 'aovs' })]), 'exr', platform)
+  assert.equal(multipart.desc.list, 'part')
+  const layers = await openDocument(await exr({ width: 2, height: 2, channels: [{ name: 'R' }, { name: 'G' }, { name: 'B' }, { name: 'spec.R' }, { name: 'spec.G' }, { name: 'spec.B' }], value: () => 0.5 }), 'exr', platform)
+  assert.equal(layers.desc.list, 'layer')
+  const mip = await openDocument(await exr(part({ compression: 3, tiles: { w: 16, h: 8, mipmap: true } })), 'exr', platform)
+  assert.equal(mip.desc.list, 'mip')
+  const single = await openDocument(await exr(part()), 'exr', platform)
+  assert.equal(single.desc.list, undefined)
+})

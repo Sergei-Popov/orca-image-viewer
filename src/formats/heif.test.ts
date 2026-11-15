@@ -145,3 +145,39 @@ test('HEIF damaged: no meta box, no primary image, item data past the end', asyn
     (e: unknown) => codeOf(e) === 'damaged'
   )
 })
+
+test('HEIF damaged: a coded image whose ispe size is past the limits is too large before decoding', async () => {
+  const file = heif({ primary: 1, items: [{ id: 1, type: 'hvc1', data: coded(5, 6, 7), props: [hvcC(), ispe(16318468, 2)] }] })
+  let decoded = false
+  const doc = await openDocument(file, 'heic', { inflate, decodeVideo: { ...video, decode: async (...args: Parameters<typeof video.decode>) => ((decoded = true), video.decode(...args)) } })
+  await assert.rejects(
+    () => doc.decode(0),
+    (e: unknown) => codeOf(e) === 'too-large'
+  )
+  assert.equal(decoded, false)
+})
+
+test('HEIF details in Russian: grid, alpha, mattes, rotation and colour translated', async () => {
+  const { englishLeft } = await import('../fixtures/russian')
+  const tile = (id: number) => ({ id, type: 'hvc1', hidden: true, data: coded(10, 0, 0), props: [hvcC(), ispe(2, 2)] })
+  const file = heif({
+    primary: 1,
+    items: [
+      { id: 1, type: 'grid', idat: true, data: gridData(1, 2, 4, 2), props: [ispe(4, 2), nclx(1, 13, 6, true), pixi([8, 8, 8]), irot(1), imir(0)] },
+      tile(2),
+      tile(3),
+      { id: 4, type: 'hvc1', hidden: true, data: coded(128, 0, 0), props: [hvcC(), ispe(4, 2), auxC('urn:mpeg:hevc:2015:auxid:1')] },
+      { id: 5, type: 'hvc1', hidden: true, data: coded(77, 0, 0), props: [hvcC(), ispe(4, 2), auxC('urn:com:apple:photo:2018:aux:portraiteffectsmatte')] },
+      { id: 6, type: 'hvc1', hidden: true, data: coded(77, 0, 0), props: [hvcC(), ispe(4, 2), auxC('urn:mpeg:hevc:2015:auxid:2')] }
+    ],
+    refs: [
+      { type: 'dimg', from: 1, to: [2, 3] },
+      { type: 'auxl', from: 4, to: [1] },
+      { type: 'auxl', from: 5, to: [1] },
+      { type: 'auxl', from: 6, to: [1] }
+    ]
+  })
+  const doc = await openDocument(file, 'heic', platform)
+  assert.equal(item(doc.desc, 'image', 'grid'), '2 × 1 tiles of 2 × 2')
+  assert.deepEqual(englishLeft(doc.desc), [])
+})
