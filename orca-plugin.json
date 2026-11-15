@@ -11,6 +11,7 @@
     "url": "https://github.com/Sergei-Popov"
   },
   "repository": "https://github.com/Sergei-Popov/orca-image-viewer",
+  "icon": "images/icon.png",
   "license": "MIT",
   "engines": {
     "orca": ">=1.4.248"
@@ -25,7 +26,8 @@
         "entry": "src/editor.ts",
         "priority": "default",
         "contentKind": "bytes",
-        "frame": "isolated"
+        "frame": "isolated",
+        "icon": "icons/image.png"
       },
       {
         "id": "raw",
@@ -34,7 +36,8 @@
         "entry": "src/editor.ts",
         "priority": "default",
         "contentKind": "bytes",
-        "frame": "isolated"
+        "frame": "isolated",
+        "icon": "icons/raw.png"
       }
     ]
   },
