@@ -336,12 +336,14 @@ export async function openExr(bytes: Uint8Array, platform: Platform): Promise<De
   }
   if (!parts.length) throw damaged('EXR header')
 
-  // Offset tables, one per part.
-  for (const part of parts) {
-    const n = part.chunkCount || chunkCountOf(part)
-    if (n > 1 << 24) throw damaged('EXR chunk count')
-    for (let i = 0; i < n; i++) part.offsets.push(r.left >= 8 ? r.u64() : 0)
-  }
+  // Offset tables, one per part, all before the first chunk: their total length must fit in the
+  // file (chunkCount comes from the header, and a damaged one must not allocate millions of zeros).
+  const counts = parts.map((part) => part.chunkCount || chunkCountOf(part))
+  const total = counts.reduce((a, n) => a + n, 0)
+  if (counts.some((n) => n > 1 << 24) || total * 8 > r.left) throw damaged('EXR chunk count')
+  parts.forEach((part, k) => {
+    for (let i = 0; i < counts[k]; i++) part.offsets.push(r.u64())
+  })
   const tableEnd = r.pos
   // A damaged table: find the chunks by walking them from the end of the tables.
   if (parts.some((p) => p.offsets.some((o) => o < tableEnd || o >= bytes.length))) rebuildOffsets(bytes, parts, tableEnd, multipart)

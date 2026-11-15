@@ -193,3 +193,22 @@ function findAscii(bytes: Uint8Array, text: string): number {
   }
   return -1
 }
+
+test('EXR damaged headers: chunk counts across parts must fit in the file', async () => {
+  const tiny = (name: string, chunkCount: number): ExrPartSpec => ({ name, width: 1, height: 1, channels: [{ name: 'Y' }], value: () => 0.5, chunkCount })
+  const chunkCount = (e: unknown) => (e as { code?: string }).code === 'damaged' && (e as { detail?: string }).detail === 'EXR chunk count'
+  // 64 parts of 16 million chunks each, and no offset tables at all: headers only.
+  const many = await exr(
+    Array.from({ length: 64 }, (_, i) => tiny(`p${i}`, 16_000_000)),
+    { headersOnly: true }
+  )
+  const started = Date.now()
+  await assert.rejects(() => openDocument(many, 'exr', platform), chunkCount)
+  assert.ok(Date.now() - started < 1000, 'rejected at once')
+  // Small counts, but more table than file.
+  const short = new Uint8Array([...(await exr([tiny('a', 1000), tiny('b', 1000)], { headersOnly: true })), ...new Uint8Array(64)])
+  await assert.rejects(() => openDocument(short, 'exr', platform), chunkCount)
+  // The same parts with their real tables open.
+  const fine = await openDocument(await exr([tiny('a', 1), tiny('b', 1)]), 'exr', platform)
+  assert.equal(fine.desc.images.length, 2)
+})
