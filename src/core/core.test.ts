@@ -160,6 +160,7 @@ test('Info values in Russian: units, flash modes and compass points; English as 
     ['latitude', '47° 57′ 30.63″ N', '47° 57′ 30.63″ с. ш.'],
     ['altitude', '602.4 m', '602.4 м'],
     ['compression', 'None', 'Нет'],
+    ['colorSpace', 'BT.709 primaries, sRGB transfer, BT.601 matrix, full range', 'основные цвета BT.709, передаточная функция sRGB, матрица BT.601, полный диапазон'],
     ['camera', 'Test Camera', 'Test Camera']
   ]
   for (const [key, english, russian] of cases) {

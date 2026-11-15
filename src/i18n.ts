@@ -571,6 +571,13 @@ const ru: Strings = {
       [/ W$/, ' з. д.']
     ],
     direction: [[/ magnetic$/, ' (магнитный)']],
+    colorSpace: [
+      [/(\S+) primaries/, 'основные цвета $1'],
+      [/(\S+) transfer/, 'передаточная функция $1'],
+      [/(\S+) matrix/, 'матрица $1'],
+      [/full range/, 'полный диапазон'],
+      [/video range/, 'видеодиапазон']
+    ],
     speed: [
       [/ km\/h$/, ' км/ч'],
       [/ mph$/, ' миль/ч'],

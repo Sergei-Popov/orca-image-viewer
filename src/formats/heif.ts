@@ -416,7 +416,7 @@ export async function openHeif(bytes: Uint8Array, platform: Platform): Promise<D
   }
   const transforms: string[] = []
   for (const p of primary.props) {
-    if (p.type === 'irot') transforms.push(`${(heif.bytes[p.body] & 3) * 90}°`)
+    if (p.type === 'irot' && heif.bytes[p.body] & 3) transforms.push(`${(heif.bytes[p.body] & 3) * 90}°`)
   }
   const mirrored = primary.props.some((p) => p.type === 'imir')
   const imageItems: InfoItem[] = [
@@ -651,9 +651,11 @@ const PRIMARIES: Record<number, string> = { 1: 'BT.709', 5: 'BT.601 PAL', 6: 'BT
 const TRANSFERS: Record<number, string> = { 1: 'BT.709', 8: 'Linear', 13: 'sRGB', 16: 'PQ', 18: 'HLG' }
 const MATRICES: Record<number, string> = { 0: 'RGB', 1: 'BT.709', 5: 'BT.601', 6: 'BT.601', 9: 'BT.2020' }
 
+/** The specified parts of an nclx colour description; 2 means unspecified in each field. */
 function nclxText(n: number[]): string {
   const [p, t, m, full] = n
-  return `${PRIMARIES[p] ?? `primaries ${p}`}, ${TRANSFERS[t] ?? `transfer ${t}`}, ${MATRICES[m] ?? `matrix ${m}`}, ${full ? 'full' : 'video'} range`
+  const named = (table: Record<number, string>, v: number, what: string) => (v === 2 ? '' : `${table[v] ?? v} ${what}`)
+  return [named(PRIMARIES, p, 'primaries'), named(TRANSFERS, t, 'transfer'), named(MATRICES, m, 'matrix'), full ? 'full range' : 'video range'].filter(Boolean).join(', ')
 }
 
 export function isHeif(bytes: Uint8Array): boolean {

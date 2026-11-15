@@ -63,7 +63,7 @@ test('HEIC grid: tiles placed and cropped, rotation, thumbnail, EXIF, colour and
   )
   assert.equal(item(d, 'image', 'codec'), 'hvc1.1.6.L93.B0')
   assert.equal(item(d, 'image', 'grid'), '2 × 2 tiles of 2 × 2')
-  assert.equal(item(d, 'image', 'colorSpace'), 'BT.709, sRGB, BT.601, full range')
+  assert.equal(item(d, 'image', 'colorSpace'), 'BT.709 primaries, sRGB transfer, BT.601 matrix, full range')
   assert.equal(item(d, 'image', 'rotation'), '90° CCW')
   assert.equal(item(d, 'file', 'thumbnails'), '1')
   assert.ok(item(d, 'camera', 'camera')?.includes('Phone 12'))
