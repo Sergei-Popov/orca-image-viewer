@@ -283,3 +283,13 @@ test('Translations: only the tables’ own entries, and text from the file is ne
   assert.equal(infoValue(ru, 'artist', 'Normal'), 'Normal')
   assert.equal(infoValue(ru, 'blend', 'Overlay'), 'Перекрытие')
 })
+
+test('Text file: the hint names the view toggle’s Source button as Orca labels it in each language', async () => {
+  const { describeError, stringsFor } = await import('../i18n')
+  const { ImageError } = await import('./errors')
+  assert.ok(describeError(new ImageError('text-file'), stringsFor('en')).includes('Switch to Source in the view toggle'))
+  // Orca's Russian UI calls the toggle's Source button «Исходный текст».
+  const ru = describeError(new ImageError('text-file'), stringsFor('ru'))
+  assert.ok(ru.includes('«Исходный текст»'), ru)
+  assert.ok(!/Source/.test(ru))
+})
