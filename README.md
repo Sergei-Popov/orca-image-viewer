@@ -58,7 +58,8 @@ register them.
   JPEG (with shared tables) and WebP; horizontal and floating-point predictors; RGB, grey,
   palette, CMYK, YCbCr, CIELAB, extra alpha channels; BigTIFF; EXIF, GPS, XMP, ICC and page names.
 - **PSD and PSB** — the saved composite, every layer on its own, groups, visibility toggles, and
-  a composite of the visible layers with blend modes, opacity, clipping and masks. When a file
+  a composite of the visible layers with blend modes, opacity, clipping and masks. A transparent
+  composite that Photoshop or GIMP saved over white is shown with the white taken out. When a file
   has no saved composite the layers are composited and a notice says so. Adjustment layers and
   layer effects are not drawn. RGB, grey, CMYK, Lab, indexed and bitmap, 8, 16 and 32-bit.
 - **OpenEXR** — scanline and tiled images, multi-part files, layers (`diffuse.R` …), MIP and
@@ -102,6 +103,8 @@ inside TIFF or ICNS.
   it shows its own message and the plugin never sees them.
 - **Image size.** One decoded image may have up to 120 megapixels and 768 MiB of samples;
   larger ones get a "too large" message (other images in the same file still open).
+- **Image count.** An EXR or DDS file that describes more than 8,192 images (parts and layers ×
+  levels, array layers × faces × MIP levels and slices) is treated as damaged.
 - Decoding runs in a worker, so a slow file never freezes the tab, and only the image on screen
   is kept decoded.
 - A damaged or cut-off file shows what could be read and says what is missing; an empty file or

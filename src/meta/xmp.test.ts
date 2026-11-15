@@ -1,5 +1,5 @@
 import { assert, test } from 'orca/testing'
-import { xmpProperties, xmpSection } from './xmp'
+import { stripXpacket, xmpProperties, xmpSection } from './xmp'
 
 const props = (packet: string) => Object.fromEntries(xmpProperties(packet).map((i) => [i.key, i.value]))
 
@@ -35,7 +35,10 @@ test('XMP damaged packets: long runs, unclosed tags and quotes, deep nesting all
     `${head}>${'<a:b>'.repeat(size / 5)}`,
     `${head}>${'<rdf:Description a:b="x '.repeat(size / 24)}`,
     `${'<a:b>'.repeat(63)}${'</c:d>'.repeat(size / 6)}`,
-    `${head}>${'<dc:x><rdf:Bag><rdf:li>'.repeat(size / 24)}`
+    `${head}>${'<dc:x><rdf:Bag><rdf:li>'.repeat(size / 24)}`,
+    // Unclosed xpacket instructions: each start used to scan on to the next '>'.
+    `${head}>${'<?xpacket '.repeat(size / 10)}`,
+    `${'<?xpacket begin="'.repeat(size / 17)}>${head}`
   ]
   for (const p of packets) {
     const started = Date.now()
@@ -43,4 +46,19 @@ test('XMP damaged packets: long runs, unclosed tags and quotes, deep nesting all
     assert.ok(Date.now() - started < 1000, `${p.slice(0, 80)}… parsed at once`)
   }
   assert.equal(props(packets[0])['dc:format'], 'x')
+})
+
+test('XMP xpacket instructions: removed as the old pattern removed them, anywhere in the packet', () => {
+  const pattern = (t: string) => t.replace(/<\?xpacket[^>]*\?>/g, '')
+  const cases = [
+    '<?xpacket begin="\ufeff" id="W5M0MpCehiHzreSzNTczkc9d"?><x:xmpmeta/><?xpacket end="w"?>',
+    '<?xpacket?>a<?xpacket ?>b',
+    '<?xpacket begin="" > not closed ?> <x/>',
+    '<?xpacket <?xpacket end="r"?> tail',
+    'no instructions at all',
+    '<?xpacket',
+    '<?xpacket>?>',
+    'a<?xpacket b<?xpacket c?>d?>e>'
+  ]
+  for (const c of cases) assert.equal(stripXpacket(c), pattern(c), c)
 })

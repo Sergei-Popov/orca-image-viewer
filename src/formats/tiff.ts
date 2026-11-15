@@ -10,8 +10,8 @@ import { text } from '../core/bytes'
 import { checkSize, damaged, ImageError, unsupportedCompression, unsupportedFeature, unsupportedPixels } from '../core/errors'
 import { float24ToFloat, halfTable } from '../core/half'
 import type { Decoded, ImageDesc, InfoItem, InfoSection, Notice, Platform, Raster, SampleKind, Samples } from '../core/model'
-import { allocate, bytesPerSample, raster } from '../core/model'
-import { cmykToRgb, dropAlpha, labToRgb, orient, valueRange } from '../core/pixels'
+import { allocate, bytesPerSample, joinLabel, raster } from '../core/model'
+import { cmykToRgb, dropAlpha, labToRgb, orient, swapsSides, valueRange } from '../core/pixels'
 import { count as counted } from '../core/plural'
 import { exifDirs, exifDate, exifSummary, ORIENTATION_NAMES } from '../meta/exif'
 import { iccItems, readIcc } from '../meta/icc'
@@ -804,6 +804,8 @@ export function imageItems(tiff: Tiff, im: TiffImage): InfoItem[] {
 export interface TiffEntry {
   ifd: Ifd
   label: string
+  /** The label's segments that are the file's text (the page name). */
+  fileText?: number[]
   page: number
 }
 
@@ -826,7 +828,8 @@ export function tiffEntries(tiff: Tiff, max = 2000): TiffEntry[] {
         // No page name.
       }
       const base = reduced && page > 1 ? `Page ${page} (reduced)` : `Page ${page}`
-      out.push({ ifd, label: name ? `${base} · ${name}` : base, page })
+      // The page name is the file's text.
+      out.push({ ifd, ...joinLabel(name ? [{ text: base }, { text: name, file: true }] : [{ text: base }]), page })
     }
     const subs = tiff.values(ifd.entries.get(T.SubIFDs), 64)
     let k = 0
@@ -862,13 +865,14 @@ export async function openTiff(bytes: Uint8Array, platform: Platform): Promise<D
       unsupported = error instanceof ImageError ? error.detail || error.code : 'damaged'
     }
     layouts.push(im)
-    const swap = im && im.orientation >= 5
+    const swap = im && swapsSides(im.orientation)
     images.push({
       id: i,
       width: im ? (swap ? im.height : im.width) : 0,
       height: im ? (swap ? im.width : im.height) : 0,
       at: [i],
       label: e.label,
+      fileText: e.fileText,
       unsupported,
       info: im ? imageItems(tiff, im) : []
     })
@@ -922,7 +926,7 @@ export async function openTiff(bytes: Uint8Array, platform: Platform): Promise<D
     desc: {
       format: tiff.big ? 'BigTIFF' : 'TIFF',
       images,
-      axes: single ? [] : [{ key: 'page', labels: images.map((i) => i.label) }],
+      axes: single ? [] : [{ key: 'page', labels: images.map((i) => i.label), fileText: images.map((i) => i.fileText ?? []) }],
       primary: Math.max(0, images.findIndex((i) => !i.unsupported)),
       list: single ? undefined : 'page',
       info: [imageSection, { title: 'file', items: fileItems }, ...sections],

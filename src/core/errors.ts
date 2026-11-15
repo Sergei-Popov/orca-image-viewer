@@ -37,6 +37,11 @@ export const unsupportedFeature = (name: string) => new ImageError('unsupported-
 export const MAX_PIXELS = 120_000_000
 export const MAX_RASTER_BYTES = 768 * 1024 * 1024
 export const MAX_SIDE = 1 << 20
+/**
+ * More images than this in one file (parts, layers, faces, slices × levels) comes from a damaged
+ * header: the counts are checked before any image is described.
+ */
+export const MAX_IMAGES = 8192
 
 export function checkSize(width: number, height: number, bytesPerPixel: number): void {
   if (!Number.isInteger(width) || !Number.isInteger(height) || width <= 0 || height <= 0) {

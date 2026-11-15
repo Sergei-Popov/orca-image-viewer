@@ -9,7 +9,7 @@ import { undoFloatingPoint, undoHorizontal } from '../codecs/predictor'
 import { latin1, Reader, text, utf16be } from '../core/bytes'
 import { checkSize, damaged, ImageError, MAX_RASTER_BYTES, unsupportedPixels } from '../core/errors'
 import type { Decoded, ImageDesc, InfoItem, InfoSection, LayerDesc, Notice, Platform, Raster, SampleKind, Samples } from '../core/model'
-import { allocate, raster } from '../core/model'
+import { allocate, joinLabel, raster } from '../core/model'
 import { cmykToRgb, labToRgb } from '../core/pixels'
 import { count as counted } from '../core/plural'
 import { exifFromBlock } from '../meta/exif'
@@ -206,7 +206,9 @@ function readResources(bytes: Uint8Array, from: number, to: number): Resources {
 
 /**
  * Takes the white back out of a flattened image that was composited over white:
- * colour = (stored − (1 − alpha)) / alpha, as psd-tools and ImageMagick read it.
+ * colour = (stored − (1 − alpha)) / alpha, as psd-tools and ImageMagick read it. Integer samples
+ * are kept in range; 32-bit float samples are left unclamped, as psd-tools leaves them, so HDR
+ * colour above 1 survives.
  */
 function unmatte(colour: Samples[], alpha: Samples, top: number): void {
   const float = top === 1
@@ -215,9 +217,23 @@ function unmatte(colour: Samples[], alpha: Samples, top: number): void {
       const a = alpha[i]
       if (a <= 0 || a >= top) continue
       const v = ((plane[i] + a - top) * top) / a
-      plane[i] = v <= 0 ? 0 : v >= top ? top : float ? v : Math.round(v)
+      plane[i] = float ? v : v <= 0 ? 0 : v >= top ? top : Math.round(v)
     }
   }
+}
+
+/**
+ * Whether a flattened image looks composited over white. White at opacity a leaves every sample
+ * at least top − a (one level less for rounding), and clear pixels white; straight colour breaks
+ * that at almost any dark or saturated pixel that is not opaque. GIMP mattes against white, macOS
+ * sips does not, and both mark the channel the same way, so only the data can tell them apart.
+ */
+function looksMatted(colour: Samples[], alpha: Samples, top: number): boolean {
+  const slack = top === 1 ? 1 / 4096 : 1
+  for (const plane of colour) {
+    for (let i = 0; i < plane.length; i++) if (plane[i] < top - alpha[i] - slack) return false
+  }
+  return true
 }
 
 function blendKey(r: Reader): string {
@@ -692,7 +708,9 @@ export async function openPsd(bytes: Uint8Array, platform: Platform): Promise<De
     let image = -1
     if (hasPixels) {
       image = images.length
-      images.push({ id: image, width: w, height: h, at: [], label: rec.name || `Layer ${rec.index + 1}`, info: [] })
+      // A layer's name is the file's text; only the stand-in for a nameless layer is translated.
+      const named = rec.name ? joinLabel([{ text: rec.name, file: true }]) : { label: `Layer ${rec.index + 1}`, fileText: [] }
+      images.push({ id: image, width: w, height: h, at: [], ...named, info: [] })
       layerImage.set(image, rec)
     }
     const id = descs.length
@@ -731,10 +749,11 @@ export async function openPsd(bytes: Uint8Array, platform: Platform): Promise<De
     else if (transparencyId >= 0 && resources.alphaIds.length <= header.channels - colourTotal) transparencyAt = header.channels - resources.alphaIds.length + transparencyId
     else if (!descs.length && header.mode !== 2 && (!channelNames.length || channelNames[0] === 'Transparency')) transparencyAt = colourTotal
   }
-  // Photoshop stores a transparent RGB or grey flattened image composited over white. Writers
-  // that leave the Photoshop marks out (macOS sips, GIMP) store the colour as it is.
-  const matted =
-    transparencyAt >= 0 && (header.mode === 1 || header.mode === 3) && (transparencyId >= 0 || resources.alphaNames.includes('Transparency'))
+  // Photoshop and GIMP store a transparent RGB or grey flattened image composited over white;
+  // macOS sips stores the colour as it is. Photoshop's marks (alpha identifier 0, a "Transparency"
+  // name in resource 1045) settle it at once; without them the pixels decide (looksMatted).
+  const mattable = transparencyAt >= 0 && (header.mode === 1 || header.mode === 3)
+  const marked = transparencyId >= 0 || resources.alphaNames.includes('Transparency')
   const notices: Notice[] = []
   const noComposite = resources.realMerged === false && descs.length > 0
   if (noComposite) notices.push({ code: 'psd-no-composite' })
@@ -803,7 +822,8 @@ export async function openPsd(bytes: Uint8Array, platform: Platform): Promise<De
     }
     const colour = planes.slice(0, colourCount)
     const alpha = transparencyAt >= 0 && planes.length > transparencyAt ? planes[transparencyAt] : null
-    if (alpha && matted) unmatte(colour, alpha, d === 32 ? 1 : d === 16 ? 65535 : 255)
+    const top = d === 32 ? 1 : d === 16 ? 65535 : 255
+    if (alpha && mattable && (marked || looksMatted(colour, alpha, top))) unmatte(colour, alpha, top)
     const local: Notice[] = []
     const out = toRaster(header, width, height, colour, alpha, palette, local)
     if (!complete) out.partial = true

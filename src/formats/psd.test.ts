@@ -70,6 +70,18 @@ test('PSD layers: groups, blend modes, opacity, hidden and text layers, Unicode 
   assert.equal(under[1], 0)
 })
 
+test('PSD layer names in Russian: a layer named like a decoder word stays as the file has it', async () => {
+  const { imageText, stringsFor } = await import('../i18n')
+  const ru = stringsFor('ru')
+  const layer = (name: string) => ({ name, width: 1, height: 1, channels: { 0: fill(1, 9), 1: fill(1, 9), 2: fill(1, 9) } })
+  const doc = await openDocument(psd({ width: 1, height: 1, planes: [fill(1, 9), fill(1, 9), fill(1, 9)], layers: [layer('Alpha'), layer('Layer 2'), layer('')] }), 'psd', platform)
+  assert.deepEqual(
+    doc.desc.images.map((i) => imageText(ru, i.label, i.fileText)),
+    // The composite, then the layers from the top: the nameless third one gets a stand-in name.
+    ['Итог', 'Слой 3', 'Layer 2', 'Alpha']
+  )
+})
+
 test('PSD without a saved composite: the visible layers are composited, and the viewer says so', async () => {
   const file = psd({
     width: 2,
@@ -201,7 +213,7 @@ test('PSD details in Russian: modes, depths, compression, version and group coun
   for (const file of files) assert.deepEqual(englishLeft((await openDocument(file, 'psd', platform)).desc), [])
 })
 
-test('PSD transparency: Photoshop flattened images over white are un-matted, sips files kept, 1006 spot channels not alpha', async () => {
+test('PSD transparency: Photoshop and GIMP flattened images over white are un-matted, sips files kept, 1006 spot channels not alpha', async () => {
   // A red-pink pixel at 80% opacity, which Photoshop stores composited over white, and a clear one.
   const stored = [fill(2, 255), Uint8Array.of(51, 255), Uint8Array.of(153, 255), Uint8Array.of(204, 0)]
   const layer = { name: 'Layer 1', width: 1, height: 1, channels: { [-1]: fill(1, 204), 0: fill(1, 255), 1: fill(1, 0), 2: fill(1, 128) } }
@@ -219,9 +231,26 @@ test('PSD transparency: Photoshop flattened images over white are un-matted, sip
   const mixed = pixel(composite, 0, 0)
   assert.ok(mixed.every((v, i) => Math.abs(v - [255, 0, 128, 204][i]) <= 1), `layer composite ${mixed}`)
 
-  // macOS sips names the channel only in resource 1006 and stores the colour as it is.
-  const sips = await openDocument(psd({ width: 2, height: 1, planes: stored, mergedAlpha: true, layers: [layer], pascalAlphaNames: ['Transparency'] }), 'psd', platform)
-  assert.deepEqual(pixel(await sips.decode(0), 0, 0), [255, 51, 153, 204])
+  // GIMP marks the channel only with the negative layer count and resource 1006, yet blends the
+  // flattened image against white too: the data shows it (no sample below 255 − alpha − 1).
+  const gimp = await openDocument(psd({ width: 2, height: 1, planes: stored, mergedAlpha: true, layers: [layer], pascalAlphaNames: ['Transparency'] }), 'psd', platform)
+  assert.deepEqual(pixel(await gimp.decode(0), 0, 0), [255, 0, 128, 204])
+
+  // macOS sips marks it the same way but stores the colour as it is: a green of 0 at 80% and a
+  // black clear pixel could not come from white, so nothing is changed.
+  const straight = [Uint8Array.of(255, 0), Uint8Array.of(0, 0), Uint8Array.of(128, 0), Uint8Array.of(204, 0)]
+  const sips = await openDocument(psd({ width: 2, height: 1, planes: straight, mergedAlpha: true, layers: [layer], pascalAlphaNames: ['Transparency'] }), 'psd', platform)
+  const kept = await sips.decode(0)
+  assert.deepEqual(pixel(kept, 0, 0), [255, 0, 128, 204])
+  assert.deepEqual(pixel(kept, 1, 0), [0, 0, 0, 0])
+  // One pale semi-transparent pixel is not enough to call straight colour matted when another
+  // pixel breaks the rule: the pale one keeps its stored value.
+  const mixed2 = await openDocument(
+    psd({ width: 2, height: 1, planes: [Uint8Array.of(250, 10), Uint8Array.of(250, 10), Uint8Array.of(250, 10), Uint8Array.of(128, 128)], mergedAlpha: true, layers: [layer], pascalAlphaNames: ['Transparency'] }),
+    'psd',
+    platform
+  )
+  assert.deepEqual(pixel(await mixed2.decode(0), 0, 0), [250, 250, 250, 128])
 
   // A flat 32-bit Photoshop file without layers: identifier 0 marks the transparency channel.
   const float = await openDocument(
@@ -233,6 +262,16 @@ test('PSD transparency: Photoshop flattened images over white are un-matted, sip
   assert.equal(f.channels, 4)
   assert.deepEqual(pixel(f, 0, 0).map((v) => Math.round(v * 1000) / 1000), [0.2, 1, 0, 0.5])
   assert.equal(item(float.desc, 'image', 'alpha'), undefined)
+  // HDR colour above 1 is not clipped: straight (4, 0.25, 2) at 50%, stored over white as
+  // (2.5, 0.625, 1.5), comes back as it was, like an opaque 4.0 beside it.
+  const hdr = await openDocument(
+    psd({ width: 2, height: 1, depth: 32, planes: [Float32Array.of(2.5, 4), Float32Array.of(0.625, 4), Float32Array.of(1.5, 4), Float32Array.of(0.5, 1)], alphaIds: [0], alphaNames: ['Transparency'], compression: 0 }),
+    'psd',
+    platform
+  )
+  const h = await hdr.decode(0)
+  assert.deepEqual(pixel(h, 0, 0), [4, 0.25, 2, 0.5])
+  assert.deepEqual(pixel(h, 1, 0), [4, 4, 4, 1])
 
   // Grey: (200 + 100 − 255) × 255 / 100 = 114.75.
   const grey = await openDocument(psd({ width: 1, height: 1, mode: 1, planes: [fill(1, 200), fill(1, 100)], mergedAlpha: true, layers: [{ name: 'Layer 1', width: 1, height: 1, channels: { [-1]: fill(1, 100), 0: fill(1, 115) } }], alphaIds: [0], alphaNames: ['Transparency'] }), 'psd', platform)

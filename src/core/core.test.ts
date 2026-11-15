@@ -195,6 +195,31 @@ test('Error details in Russian: phrases, patterns and damaged parts; English as 
   }
 })
 
+test('Error details in Russian: every detail a reader puts in a damaged error has a Russian form', async () => {
+  const { errorDetail, stringsFor } = await import('../i18n')
+  const ru = stringsFor('ru')
+  // Every damaged(…) detail in src (grep "damaged(" outside the tests), with sample values for
+  // the ones built from the file.
+  const details = [
+    'av1C', 'B44 data', 'BigTIFF offset size', 'DDS data', 'DDS DX10 header', 'DDS header', 'DDS image count', 'DDS image', 'DDS size',
+    'DEFLATE', 'EXR channel list', 'EXR chunk count', 'EXR data window', 'EXR header', 'EXR image count', 'EXR image data', 'EXR image',
+    'EXR part count', 'EXR RLE data', 'EXR signature', 'HEIF derivation depth', 'HEIF grid tiles', 'HEIF idat', 'HEIF identity item',
+    'HEIF image', 'HEIF item data past the end', 'HEIF item data', 'HEIF meta box', 'HEIF primary image', 'hvcC', 'ICNS entries',
+    'ICNS entry', 'ICNS header', 'IFD entry count', 'IFD offset', 'JPEG data', 'Lab without three channels', 'PIZ bitmap',
+    'PIZ code length', 'PIZ code table', 'PIZ code', 'PIZ data length', 'PIZ data', 'PIZ run', 'PSD colour table', 'PSD header',
+    'PSD image data', 'PSD layer channels', 'PSD layer count', 'PSD layer record', 'PSD layer', 'PSD signature', 'PXR24 data',
+    'QOI signature', 'Radiance header', 'Radiance resolution', 'Radiance run', 'Radiance scanline width', 'Radiance scanline',
+    'Radiance signature', 'RGB with fewer than 3 samples', 'TGA colour map', 'TGA header', 'TIFF bits per sample', 'TIFF byte order',
+    'TIFF colour map', 'TIFF has no images', 'TIFF header', 'TIFF image data', 'TIFF image size', 'TIFF page', 'TIFF samples per pixel',
+    'TIFF strip offsets', 'TIFF tile size', 'YCbCr subsampling',
+    'ic04 data', 'EXR attribute dataWindow', 'HEIF hvcC', 'HEIF av1C', 'iloc field size 9', 'PSD version 3', 'QOI channels 5', 'size 0×0'
+  ]
+  const missing = details.filter((d) => !/[а-яё]/i.test(errorDetail(ru, d)))
+  assert.deepEqual(missing, [])
+  assert.equal(errorDetail(ru, 'DDS image count'), 'число изображений DDS')
+  assert.equal(errorDetail(ru, 'EXR image count'), 'число изображений EXR')
+})
+
 test('No HEVC decoder: a plain message naming the codec, and a hint for HEVC only', async () => {
   const { errorHint, fill, stringsFor } = await import('../i18n')
   for (const t of [stringsFor('en'), stringsFor('ru')]) {
@@ -221,6 +246,30 @@ test('Thumbnails: a new version of the file drops the thumbnails of the old one'
   assert.equal(cache.get(2, 0), 'yellow page 1')
 })
 
+test('Side list: one row per position on the list axis, where the current image stands, in one pass', async () => {
+  const { listEntries } = await import('../viewer/list')
+  // 4 parts × 3 levels: the list axis is the part (0), the level (1) follows the current image.
+  const images = Array.from({ length: 12 }, (_, id) => ({ id, width: 1, height: 1, at: [Math.floor(id / 3), id % 3], label: `${id}`, info: [] }))
+  assert.deepEqual(listEntries(images, 0, null).map((i) => i.id), [0, 3, 6, 9])
+  assert.deepEqual(listEntries(images, 0, images[5]).map((i) => i.id), [2, 5, 8, 11])
+  assert.deepEqual(listEntries(images, 1, images[7]).map((i) => i.id), [6, 7, 8])
+  assert.deepEqual(listEntries(images, -1, images[7]).length, 12)
+  // Positions of different lengths are not on one axis: nothing to list.
+  assert.deepEqual(listEntries([...images, { id: 12, width: 1, height: 1, at: [4], label: '12', info: [] }], 0, null), [])
+
+  // 8192 images (1024 layers × 8 mips) read each image's position a few times, not 8192 times:
+  // the old filter compared every image with every other one on each click.
+  let reads = 0
+  const many = Array.from({ length: 8192 }, (_, id) => {
+    const at = [Math.floor(id / 8), id % 8]
+    return { id, width: 1, height: 1, label: '', info: [], get at() { reads++; return at } }
+  })
+  const rows = listEntries(many, 0, many[8191 - 4])
+  assert.equal(rows.length, 1024)
+  assert.ok(rows.every((r) => r.at[1] === 3))
+  assert.ok(reads < 8192 * 8, `${reads} reads of image positions`)
+})
+
 test('Tone controls: 8-bit images get levels, Auto contrast and reset; exposure only past 8-bit display values', () => {
   const u8 = raster(2, 1, 3, 'u8', new Uint8Array(6))
   assert.deepEqual(toneControls(u8), { exposure: false, curve: false, auto: 'contrast' })
@@ -243,6 +292,11 @@ test('Overview: boxes stay inside the image when one side is shorter than the fa
   const o = overview(tall, 10)
   assert.deepEqual([o.raster.width, o.raster.height], [1, 10])
   assert.deepEqual(Array.from(o.raster.data), [0, 0, 0, 0, 0, 1, 1, 1, 1, 1])
+  // Its scale is the coarser axis' (rows were averaged 100 to 1), so zooming in brings full-size
+  // tiles instead of the averaged overview; the same for a 1-row strip.
+  assert.equal(o.scale, 0.01)
+  assert.equal(overview(raster(4096, 1, 1, 'u8', new Uint8Array(4096)), 2048).scale, 0.5)
+  assert.equal(overview(raster(1, 4096, 1, 'u8', new Uint8Array(4096)), 2048).scale, 0.5)
   // A million-row strip finishes in about the time of its pixel count, not factor² per pixel.
   const strip = raster(1, 1 << 20, 1, 'u8', new Uint8Array(1 << 20).fill(9))
   const started = Date.now()

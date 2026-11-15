@@ -275,7 +275,9 @@ export function overview(r: Raster, maxSide: number): { raster: Raster; scale: n
       for (let k = 0; k < c; k++) out[d + k] = cnt[k] ? sum[k] / cnt[k] : 0
     }
   }
-  return { raster: { ...r, width: w, height: h, kind: 'f32', data: out, bits: 32 }, scale: w / r.width }
+  // The coarser of the two axes: a side that cannot shrink (1 pixel wide) must not hide that the
+  // other one did, or the viewport never swaps the averaged overview for full-size tiles.
+  return { raster: { ...r, width: w, height: h, kind: 'f32', data: out, bits: 32 }, scale: Math.min(w / r.width, h / r.height) }
 }
 
 /** Smallest and largest finite colour values, normalized. */

@@ -68,6 +68,8 @@ export interface InfoSection {
 export interface Axis {
   key: 'page' | 'mip' | 'face' | 'layer' | 'slice' | 'size' | 'part' | 'image' | 'frame'
   labels: string[]
+  /** For each label, which of its ` · ` segments are text from the file (see ImageDesc). */
+  fileText?: number[][]
 }
 
 export interface ImageDesc {
@@ -78,6 +80,11 @@ export interface ImageDesc {
   at: number[]
   /** Short text for lists and file names: `Page 2`, `512×512 · ic09`. */
   label: string
+  /**
+   * The indexes of the label's ` · ` segments that are text from the file (EXR part and channel
+   * names, TIFF page names, PSD layer names): shown as they are, never translated.
+   */
+  fileText?: number[]
   /** Why it cannot be shown (a JPEG 2000 icon); undefined when it can. */
   unsupported?: string
   info: InfoItem[]
@@ -184,6 +191,21 @@ export function allocate(kind: SampleKind, length: number): Samples {
   if (kind === 'u8') return new Uint8Array(length)
   if (kind === 'f32') return new Float32Array(length)
   return new Uint16Array(length)
+}
+
+/**
+ * A label joined from pieces with ` · `, and the indexes of its segments that came from the file
+ * (a piece may itself hold ` · `).
+ */
+export function joinLabel(pieces: readonly { text: string; file?: boolean }[]): { label: string; fileText: number[] } {
+  const fileText: number[] = []
+  let n = 0
+  for (const piece of pieces) {
+    const count = piece.text.split(' · ').length
+    if (piece.file) for (let i = 0; i < count; i++) fileText.push(n + i)
+    n += count
+  }
+  return { label: pieces.map((p) => p.text).join(' · '), fileText }
 }
 
 /** A raster with defaults for the common case: sRGB colour, no alpha. */

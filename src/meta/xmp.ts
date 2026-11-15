@@ -189,9 +189,34 @@ export function cameraExtrasFromXmp(packet: string): CameraExtras {
   }
 }
 
+/**
+ * Removes the `<?xpacket … ?>` instructions (the text up to the first `>`, which must close with
+ * `?>`). One pass: the next `>` is found once for all the starts before it, so a packet full of
+ * unclosed `<?xpacket` costs no more than its length.
+ */
+export function stripXpacket(text: string): string {
+  const parts: string[] = []
+  let from = 0
+  let at = text.indexOf('<?xpacket')
+  let gt = -1
+  while (at >= 0) {
+    if (gt < at + 9) gt = text.indexOf('>', at + 9)
+    if (gt < 0) break
+    if (gt - 1 >= at + 9 && text.charCodeAt(gt - 1) === 0x3f) {
+      parts.push(text.slice(from, at))
+      from = gt + 1
+      at = text.indexOf('<?xpacket', from)
+    } else {
+      at = text.indexOf('<?xpacket', at + 1)
+    }
+  }
+  parts.push(text.slice(from))
+  return parts.join('')
+}
+
 export function xmpSection(packet: string): InfoSection | null {
   const start = packet.indexOf('<x:xmpmeta')
-  const clean = (start >= 0 ? packet.slice(start) : packet).replace(/<\?xpacket[^>]*\?>/g, '').trim()
+  const clean = stripXpacket(start >= 0 ? packet.slice(start) : packet).trim()
   if (!clean) return null
   const end = clean.lastIndexOf('</x:xmpmeta>')
   const body = end >= 0 ? clean.slice(0, end + 12) : clean

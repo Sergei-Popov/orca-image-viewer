@@ -138,6 +138,26 @@ test('DDS volume texture: slices of every mip level', async () => {
   assert.equal((await doc.decode(2)).data[0], 30)
 })
 
+test('DDS damaged: a file cut off part way shows the surfaces it has, the rest report damaged', async () => {
+  // A BC1 cube array, 2 layers × 6 faces × 3 mips of 8×8, cut after a block and a half: the first
+  // surface is partly there, every later one is missing (the repo's cut.dds sample is the same).
+  const block = bc1Block(rgb565(0, 0, 255), rgb565(0, 0, 255), new Array(16).fill(0))
+  const data = new ByteWriter(true).bytes(block).bytes(block.subarray(0, 4)).done()
+  const doc = await open(dds({ width: 8, height: 8, mips: 3, dxgi: 71, cube: true, arraySize: 2, data }))
+  assert.equal(doc.desc.images.length, 36)
+  const first = await doc.decode(0)
+  assert.ok(first.partial)
+  assert.deepEqual(Array.from(first.data.subarray(0, 4)), [0, 0, 255, 255])
+  await assert.rejects(() => doc.decode(1), (e: unknown) => (e as { code?: string; detail?: string }).code === 'damaged' && (e as { detail?: string }).detail === 'DDS data')
+  await assert.rejects(() => doc.decode(35), (e: unknown) => (e as { code?: string }).code === 'damaged')
+  // An array the file holds only a third of still opens.
+  const two = new ByteWriter(true).bytes(block).bytes(block).done()
+  const short = await open(dds({ width: 4, height: 4, dxgi: 71, arraySize: 6, data: two }))
+  assert.equal(short.desc.images.length, 6)
+  assert.deepEqual(Array.from((await short.decode(1)).data.subarray(0, 4)), [0, 0, 255, 255])
+  await assert.rejects(() => short.decode(2))
+})
+
 test('DDS damaged and unsupported: cut off, short header, YUY2', async () => {
   const blocks = new ByteWriter(true)
   for (let i = 0; i < 4; i++) blocks.bytes(bc1Block(rgb565(0, 255, 0), rgb565(0, 255, 0), new Array(16).fill(0)))
@@ -161,13 +181,19 @@ test('DDS damaged headers: array sizes and depths the file cannot hold are rejec
     await assert.rejects(() => open(dds({ width: 4, height: 4, dxgi: 28, arraySize, data: new Uint8Array(16) })), damagedCount)
     assert.ok(Date.now() - started < 1000, `arraySize ${arraySize} is rejected at once`)
   }
-  // A legacy volume texture with depth 0x7fffffff.
-  await assert.rejects(() => open(dds({ width: 4, height: 4, depth: 0x7fffffff, bits: 32, masks: [0xff, 0xff00, 0xff0000, 0xff000000], data: new Uint8Array(64) })), damagedCount)
-  // BC1: each surface needs at least one 8-byte block.
+  // Volume textures with depth 0x7fffffff, and 2^31 and more, where a signed shift would halve
+  // the depth to a negative number and let it past the count: legacy and DX10 headers.
+  for (const depth of [0x7fffffff, 0x80000000, 0xffffffff]) {
+    const started = Date.now()
+    await assert.rejects(() => open(dds({ width: 4, height: 4, depth, bits: 32, masks: [0xff, 0xff00, 0xff0000, 0xff000000], data: new Uint8Array(64) })), damagedCount)
+    await assert.rejects(() => open(dds({ width: 4, height: 4, depth, mips: 3, dxgi: 28, data: new Uint8Array(64) })), damagedCount)
+    assert.ok(Date.now() - started < 1000, `depth ${depth} is rejected at once`)
+  }
+  // BC1 needs a block per surface: a file far too short for its count is a damaged header.
   const block = bc1Block(rgb565(255, 0, 0), rgb565(255, 0, 0), new Array(16).fill(0))
   const two = new ByteWriter(true).bytes(block).bytes(block).done()
   assert.equal((await open(dds({ width: 4, height: 4, dxgi: 71, arraySize: 2, data: two }))).desc.images.length, 2)
-  await assert.rejects(() => open(dds({ width: 4, height: 4, dxgi: 71, arraySize: 3, data: two })), damagedCount)
+  await assert.rejects(() => open(dds({ width: 4, height: 4, dxgi: 71, arraySize: 4096, data: two })), damagedCount)
   // An absolute cap, even when the bytes would be there: 1×1 R8 with one byte per layer.
   assert.equal((await open(dds({ width: 1, height: 1, dxgi: 61, arraySize: 8192, data: new Uint8Array(8192) }))).desc.images.length, 8192)
   await assert.rejects(() => open(dds({ width: 1, height: 1, dxgi: 61, arraySize: 8193, data: new Uint8Array(8193) })), damagedCount)

@@ -22,6 +22,7 @@ import {
   toneControls,
   type ToneMap
 } from './tone'
+import { listEntries } from './list'
 import { ThumbCache } from './thumbs'
 import { Viewport } from './viewport'
 
@@ -287,7 +288,7 @@ export class ImageView {
     desc.axes.forEach((axis, index) => {
       if (axis.labels.length < 2) return
       const select = h('select', { className: 'iv-select', 'aria-label': this.t.axes[axis.key] })
-      axis.labels.forEach((text, i) => select.append(h('option', { value: String(i) }, imageText(this.t, text))))
+      axis.labels.forEach((text, i) => select.append(h('option', { value: String(i) }, imageText(this.t, text, axis.fileText?.[i]))))
       select.dataset.axis = String(index)
       select.addEventListener('change', () => this.pickAxis(index, Number(select.value)))
       this.pickers.append(h('label', { className: 'iv-field' }, this.t.axes[axis.key], select))
@@ -570,7 +571,7 @@ export class ImageView {
     const extra: InfoSection[] = []
     const image = this.image
     if (image && image.info.length && (desc.images.length > 1 || this.mode.kind !== 'image')) {
-      extra.push({ title: 'selected', items: [{ key: 'name', value: imageText(t, image.label) }, ...image.info] })
+      extra.push({ title: 'selected', items: [{ key: 'name', value: imageText(t, image.label, image.fileText) }, ...image.info] })
     }
     if (this.mode.kind === 'layer' && desc.layers) {
       const layer = desc.layers.find((l) => this.mode.kind === 'layer' && l.id === this.mode.layer)
@@ -749,22 +750,13 @@ export class ImageView {
     if (!desc?.list) return
     const axis = desc.axes.findIndex((a) => a.key === desc.list)
     const list = h('div', { className: 'iv-list', role: 'listbox' })
-    const images = desc.images.filter((img) => axis < 0 || desc.images.every((o) => o.at.length === img.at.length))
     // One entry per position on the list axis, with the other axes where the current image is.
-    const shown = new Map<number, ImageDesc>()
-    for (const img of images) {
-      const key = axis >= 0 ? img.at[axis] : img.id
-      const current = this.image
-      const prev = shown.get(key)
-      const matches = (i: ImageDesc) => !current || i.at.every((v, k) => k === axis || v === current.at[k])
-      if (!prev || (!matches(prev) && matches(img))) shown.set(key, img)
-    }
-    for (const img of shown.values()) {
+    for (const img of listEntries(desc.images, axis, this.image)) {
       const row = h(
         'button',
         { className: 'iv-item iv-noeye', type: 'button', role: 'option', 'aria-selected': String(this.image?.id === img.id) },
         img.unsupported ? h('span', { className: 'iv-thumb iv-plain' }, svg(icon('broken'))) : this.thumbBox(img.id, 'image'),
-        h('span', { className: 'iv-name' }, h('b', {}, imageText(this.t, img.label)), h('small', {}, img.unsupported ? imageText(this.t, img.unsupported) : `${img.width} × ${img.height}`))
+        h('span', { className: 'iv-name' }, h('b', {}, imageText(this.t, img.label, img.fileText)), h('small', {}, img.unsupported ? imageText(this.t, img.unsupported) : `${img.width} × ${img.height}`))
       )
       row.addEventListener('click', () => void this.select(img, { kind: 'image' }, this.keepViewFor(img)))
       list.append(row)
