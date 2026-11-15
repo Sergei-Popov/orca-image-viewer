@@ -181,6 +181,9 @@ const en = {
     mipmaps: 'Mip levels',
     faces: 'Faces',
     arraySize: 'Array size',
+    alphaMode: 'Alpha mode',
+    header: 'Header',
+    rowAlignment: 'Row alignment, bytes',
     depth: 'Depth',
     entries: 'Entries',
     entry: 'Entry',
@@ -220,7 +223,12 @@ const en = {
     Normal: 'Normal',
     Hidden: 'Hidden',
     Visible: 'Visible',
-    Unsupported: 'Unsupported'
+    Unsupported: 'Unsupported',
+    Straight: 'Straight',
+    Premultiplied: 'Premultiplied',
+    Opaque: 'Opaque',
+    Custom: 'Custom',
+    Legacy: 'Legacy'
   },
   units: { b: 'B', kb: 'KB', mb: 'MB', gb: 'GB' }
 }
@@ -407,6 +415,9 @@ const ru: Strings = {
     mipmaps: 'Мип-уровни',
     faces: 'Грани',
     arraySize: 'Размер массива',
+    alphaMode: 'Режим альфы',
+    header: 'Заголовок',
+    rowAlignment: 'Выравнивание строк, байт',
     depth: 'Глубина',
     entries: 'Записи',
     entry: 'Запись',
@@ -446,7 +457,12 @@ const ru: Strings = {
     Normal: 'Обычный',
     Hidden: 'Скрыт',
     Visible: 'Виден',
-    Unsupported: 'Не поддерживается'
+    Unsupported: 'Не поддерживается',
+    Straight: 'Обычная',
+    Premultiplied: 'Предумноженная',
+    Opaque: 'Непрозрачная',
+    Custom: 'Особая',
+    Legacy: 'Старый'
   },
   units: { b: 'Б', kb: 'КБ', mb: 'МБ', gb: 'ГБ' }
 }
