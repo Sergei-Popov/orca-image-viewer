@@ -97,6 +97,10 @@ export class ByteWriter {
     return this
   }
 
+  patchU16(at: number, v: number): void {
+    new DataView(this.buf.buffer).setUint16(at, v, this.little)
+  }
+
   patchU32(at: number, v: number): void {
     new DataView(this.buf.buffer).setUint32(at, v >>> 0, this.little)
   }
