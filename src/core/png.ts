@@ -3,6 +3,7 @@
 
 let crcTable: Uint32Array | null = null
 
+/** The running CRC-32 register over `bytes`; the finished CRC is `(crc32(…) ^ 0xffffffff) >>> 0`. */
 export function crc32(bytes: Uint8Array, crc = 0xffffffff): number {
   if (!crcTable) {
     crcTable = new Uint32Array(256)
