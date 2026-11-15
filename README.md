@@ -4,10 +4,10 @@ Image formats that [Orca](https://orca.dev) cannot show on its own, opened in it
 the file tree, a file link in an agent chat, or `orca file open`, like any picture. Without the
 plugin Orca shows "Binary file — cannot display" for them.
 
-| Files                                                                                    | What opens                                         |
-| ---------------------------------------------------------------------------------------- | -------------------------------------------------- |
-| `.tif` `.tiff` `.psd` `.psb` `.exr` `.hdr` `.pic` `.tga` `.dds` `.qoi` `.icns` `.heic` `.heif` `.hif` | **Image Viewer**, the default view for these files |
-| `.dng` `.cr2` `.cr3` `.nef` `.nrw` `.arw` `.srf` `.raf` `.rw2` `.orf` `.pef` `.srw`       | **Image Viewer** with the camera's embedded preview |
+| Files                                                                                                                                | What opens                                          |
+| ------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------- |
+| `.tif` `.tiff` `.psd` `.psb` `.exr` `.hdr` `.pic` `.tga` `.dds` `.qoi` `.icns` `.heic` `.heif` `.hif`                                | **Image Viewer**, the default view for these files  |
+| `.dng` `.cr2` `.cr3` `.nef` `.nrw` `.arw` `.srf` `.sr2` `.raf` `.rw2` `.rwl` `.orf` `.ori` `.pef` `.srw` `.iiq` `.mos` `.erf` `.kdc` | **Image Viewer** with the camera's embedded preview |
 
 PNG, JPEG, GIF, SVG, WebP, BMP, ICO and AVIF stay with Orca's own image view: the plugin does not
 register them.
@@ -59,20 +59,26 @@ register them.
 - **HEIC and HEIF** — the primary image, other top-level images and thumbnails; grid images,
   rotation, mirroring and cropping; the alpha plane; depth and portrait mattes as grey images;
   EXIF and colour information. The plugin reads the HEIF container itself and hands the HEVC or
-  AV1 data to the system's video decoder through WebCodecs. Whether that works depends on the
-  system: macOS decodes HEVC; on Windows it needs the HEVC extension; where no decoder is
-  available the viewer says so and still shows the file's details.
+  AV1 data to the system's video decoder through WebCodecs. Orca decodes HEVC only with the
+  graphics hardware: every Mac can; on Windows and Linux it depends on the graphics card and its
+  driver (on Linux also on VA-API support). Where no HEVC decoder is available, the viewer says
+  so, explains why, and still lists the file's details.
 - **Camera RAW** — the largest **embedded preview** the camera saved in the file (usually a
   full-size JPEG), turned the way the camera was held, with the smaller previews, the EXIF data,
   the sensor size and RAW compression, and the maker's notes for Canon, Nikon, Sony, Fujifilm,
   OM System/Olympus, Panasonic, Pentax and Samsung. The viewer does **not** develop the RAW
   sensor data (no demosaicing), so what you see is the camera's own rendering, and a notice says
-  so. A RAW file without a preview gets a message instead.
+  so. Some cameras and digital backs embed only a small preview (IIQ, MOS and ERF files often
+  carry about 160–330 pixels across); that is what you get for them. When the TIFF tags do not
+  name the camera, the name comes from the file's XMP. A RAW file without a preview gets a message
+  instead.
 
 **Not supported:** JPEG XL (`.jxl`) — every practical decoder for it is WebAssembly, which this
-plugin does not ship, so the type is not registered. Also not: developing RAW sensor data, EXR
-DWA compression and deep data, PSD adjustment layers and layer effects, JPEG 2000 inside TIFF or
-ICNS.
+plugin does not ship, so the type is not registered. RAW types whose files carry no rendered
+preview (`.dcr` keeps only unprocessed sensor colours, `.gpr` none at all) or are usually larger
+than Orca's 50 MiB limit (`.3fr`, `.fff`) are not registered either. Also not: developing RAW
+sensor data, EXR DWA compression and deep data, PSD adjustment layers and layer effects, JPEG 2000
+inside TIFF or ICNS.
 
 ## Limits
 
@@ -95,15 +101,15 @@ themes.
 
 ## Keyboard
 
-| Key               | Action                                   |
-| ----------------- | ---------------------------------------- |
-| `+` / `−`         | Zoom in / out                            |
-| `0` / `1` / `2`   | Fit / 100% / 200%                        |
-| Arrows            | Pan                                      |
-| `[` / `]`, PgUp / PgDn | Previous / next page, layer or image |
+| Key                     | Action                                     |
+| ----------------------- | ------------------------------------------ |
+| `+` / `−`               | Zoom in / out                              |
+| `0` / `1` / `2`         | Fit / 100% / 200%                          |
+| Arrows                  | Pan                                        |
+| `[` / `]`, PgUp / PgDn  | Previous / next page, layer or image       |
 | `C` `R` `G` `B` `A` `L` | Colour, red, green, blue, alpha, luminance |
-| `E` / `Shift+E`   | Exposure up / down half a stop           |
-| `I`               | Show or hide the details pane            |
+| `E` / `Shift+E`         | Exposure up / down half a stop             |
+| `I`                     | Show or hide the details pane              |
 
 ## Install
 
@@ -148,8 +154,9 @@ orca plugin shot local.image-viewer --editor "$PWD/path/to/image.tif"   # PNG of
 ## Trademarks
 
 Independent; not affiliated with Adobe, Apple, Microsoft, the Academy Software Foundation
-(OpenEXR), Canon, Nikon, Sony, Fujifilm, OM Digital Solutions (Olympus), Panasonic, Ricoh
-(Pentax) or Samsung. Their names appear only to say which files the plugin reads.
+(OpenEXR), Canon, Nikon, Sony, Fujifilm, OM Digital Solutions (Olympus), Panasonic, Leica Camera,
+Ricoh (Pentax), Samsung, Phase One (Leaf), Seiko Epson or Eastman Kodak. Their names appear only
+to say which files the plugin reads.
 
 ## License
 
