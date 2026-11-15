@@ -103,6 +103,9 @@ ENUMS.CalibrationIlluminant2 = ENUMS.LightSource
 
 export const ORIENTATION_NAMES = ENUMS.Orientation
 
+/** Tags holding text in another encoding than ASCII (type 2 is text already). */
+const TEXT_TAGS = new Set(['UserComment', 'XPTitle', 'XPComment', 'XPAuthor', 'XPKeywords', 'XPSubject', 'GPSProcessingMethod', 'GPSAreaInformation'])
+
 export function flashText(v: number): string {
   const parts = [v & 1 ? 'Fired' : 'Did not fire']
   const mode = (v >> 3) & 3
@@ -193,7 +196,7 @@ function formatValue(tiff: Tiff, name: string, e: IfdEntry): string {
     case 'UserComment':
       return userComment(tiff.raw(e, 4096))
     case 'MakerNote':
-      return `${e.count.toLocaleString('en')} bytes`
+      return `${e.count} bytes`
     case 'ComponentsConfiguration':
       return Array.from(raw().subarray(0, 4), (c) => ['-', 'Y', 'Cb', 'Cr', 'R', 'G', 'B'][c] ?? '?').join(' ')
     case 'CFAPattern':
@@ -250,7 +253,7 @@ export function genericValue(tiff: Tiff, e: IfdEntry): string {
   if (e.type === 7 || e.type === 1) {
     const bytes = tiff.raw(e, 64)
     if (e.count <= 16) return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join(' ')
-    return `${e.count.toLocaleString('en')} bytes`
+    return `${e.count} bytes`
   }
   const values = tiff.values(e, 17)
   const shown = values.slice(0, 16).map((v) => trimNum(v, 4)).join(', ')
@@ -304,7 +307,9 @@ function list(tiff: Tiff, ifd: Ifd | null, names: Record<number, string>, onlyKn
       continue
     }
     if (value === '') continue
-    items.push({ key: name ?? `Tag ${hex(e.tag)}`, value: value.slice(0, 2000) })
+    // Text tags show as written; named values, units and byte counts are the reader's wording.
+    const term = e.type !== 2 && !TEXT_TAGS.has(name ?? '')
+    items.push({ key: name ?? `Tag ${hex(e.tag)}`, value: value.slice(0, 2000), ...(term ? { term } : {}) })
   }
   return items
 }

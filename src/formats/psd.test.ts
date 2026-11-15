@@ -174,3 +174,29 @@ test('PSD damaged: bad signature, unsupported depth, cut-off image data', async 
   const shown = await cut.decode(0)
   assert.ok(shown.partial)
 })
+
+test('PSD details in Russian: modes, depths, compression, version and group counts translated', async () => {
+  const { englishLeft } = await import('../fixtures/russian')
+  const palette = new Uint8Array(768)
+  const files = [
+    psd({ width: 3, height: 1, depth: 16, mode: 1, compression: 3, planes: [Uint16Array.from([0, 1000, 65535])] }),
+    psd({ width: 2, height: 1, depth: 32, compression: 3, planes: [Float32Array.from([0.5, 4]), Float32Array.from([0.25, 2]), Float32Array.from([0, 1])] }),
+    psd({ width: 3, height: 1, depth: 1, mode: 0, compression: 0, planes: [Uint8Array.from([0, 1, 0])] }),
+    psd({ width: 2, height: 1, mode: 2, palette, compression: 1, planes: [Uint8Array.from([1, 2])] }),
+    psd({ width: 1, height: 1, mode: 7, compression: 2, planes: [fill(1, 1), fill(1, 2)] }),
+    psd({
+      width: 2,
+      height: 2,
+      psb: true,
+      resolution: 300,
+      planes: [fill(4, 1), fill(4, 2), fill(4, 3)],
+      layers: [
+        { name: 'Overlay', width: 2, height: 2, blend: 'over', channels: { [-1]: fill(4, 255), 0: fill(4, 9), 1: fill(4, 8), 2: fill(4, 7) } },
+        { name: '</Layer group>', width: 0, height: 0, section: 3 },
+        { name: 'Text', width: 2, height: 2, marker: 'TySh', channels: { [-1]: fill(4, 255), 0: fill(4, 1), 1: fill(4, 1), 2: fill(4, 1) } },
+        { name: 'Group', width: 0, height: 0, section: 1 }
+      ]
+    })
+  ]
+  for (const file of files) assert.deepEqual(englishLeft((await openDocument(file, 'psd', platform)).desc), [])
+})

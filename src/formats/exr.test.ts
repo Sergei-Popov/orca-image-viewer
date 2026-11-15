@@ -212,3 +212,13 @@ test('EXR damaged headers: chunk counts across parts must fit in the file', asyn
   const fine = await openDocument(await exr([tiny('a', 1), tiny('b', 1)]), 'exr', platform)
   assert.equal(fine.desc.images.length, 2)
 })
+
+test('EXR details in Russian: channel types, tiles, line order and attributes translated', async () => {
+  const { englishLeft } = await import('../fixtures/russian')
+  const files = [
+    await exr(part({ compression: 3, tiles: { w: 16, h: 8, mipmap: true } })),
+    await exr({ width: 2, height: 2, channels: [{ name: 'id', type: 0 }, { name: 'Z', type: 2 }], value: () => 1 }),
+    await exr([part({ name: 'beauty', compression: 2 }), part({ name: 'aovs', compression: 5 })])
+  ]
+  for (const file of files) assert.deepEqual(englishLeft((await openDocument(file, 'exr', platform)).desc, ['id']), [])
+})

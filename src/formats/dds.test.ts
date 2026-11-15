@@ -160,3 +160,15 @@ test('DDS damaged headers: array sizes and depths the file cannot hold are rejec
   assert.equal((await open(dds({ width: 1, height: 1, dxgi: 61, arraySize: 8192, data: new Uint8Array(8192) }))).desc.images.length, 8192)
   await assert.rejects(() => open(dds({ width: 1, height: 1, dxgi: 61, arraySize: 8193, data: new Uint8Array(8193) })), damagedCount)
 })
+
+test('DDS details in Russian: header kind, alpha mode and legacy formats translated', async () => {
+  const { englishLeft } = await import('../fixtures/russian')
+  const block = bc1Block(rgb565(255, 0, 0), rgb565(255, 0, 0), new Array(16).fill(0))
+  const files = [
+    dds({ width: 4, height: 4, dxgi: 71, arraySize: 2, data: new ByteWriter(true).bytes(block).bytes(block).done() }),
+    dds({ width: 4, height: 4, fourcc: 'DXT1', mips: 3, data: new ByteWriter(true).bytes(block).bytes(block).bytes(block).done() }),
+    dds({ width: 1, height: 1, bits: 32, masks: [0xff, 0xff00, 0xff0000, 0xff000000], cube: true, data: new Uint8Array(24) }),
+    dds({ width: 2, height: 2, depth: 2, bits: 8, pfFlags: 0x20000, masks: [0xff, 0, 0, 0], data: new Uint8Array(8) })
+  ]
+  for (const file of files) assert.deepEqual(englishLeft((await open(file)).desc), [])
+})

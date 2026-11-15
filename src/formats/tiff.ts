@@ -12,6 +12,7 @@ import { float24ToFloat, halfTable } from '../core/half'
 import type { Decoded, ImageDesc, InfoItem, InfoSection, Notice, Platform, Raster, SampleKind, Samples } from '../core/model'
 import { allocate, bytesPerSample, raster } from '../core/model'
 import { cmykToRgb, dropAlpha, labToRgb, orient, valueRange } from '../core/pixels'
+import { count as counted } from '../core/plural'
 import { exifDirs, exifDate, exifSummary, ORIENTATION_NAMES } from '../meta/exif'
 import { iccItems, readIcc } from '../meta/icc'
 import { type Ifd, T, Tiff } from '../meta/ifd'
@@ -780,7 +781,7 @@ export function imageItems(tiff: Tiff, im: TiffImage): InfoItem[] {
   const count = im.offsets.length
   items.push({
     key: 'layout',
-    value: im.tiled ? `${count} tiles of ${im.chunkWidth} × ${im.chunkHeight}` : `${count} strip${count === 1 ? '' : 's'} of ${im.chunkHeight} row${im.chunkHeight === 1 ? '' : 's'}`
+    value: im.tiled ? `${counted(count, 'tile')} of ${im.chunkWidth} × ${im.chunkHeight}` : `${counted(count, 'strip')} of ${counted(im.chunkHeight, 'row')}`
   })
   if (im.orientation > 1) items.push({ key: 'orientation', value: ORIENTATION_NAMES[im.orientation] ?? String(im.orientation) })
   const res = resolution(tiff, ifd)
@@ -876,7 +877,7 @@ export async function openTiff(bytes: Uint8Array, platform: Platform): Promise<D
     { key: 'variant', value: tiff.big ? 'BigTIFF' : 'Classic TIFF' }
   ]
   const pages = new Set(entries.map((e) => e.page)).size
-  if (entries.length > 1) fileItems.push({ key: 'pages', value: entries.length === pages ? String(pages) : `${pages} (${entries.length} images)` })
+  if (entries.length > 1) fileItems.push({ key: 'pages', value: entries.length === pages ? String(pages) : `${pages} (${counted(entries.length, 'image')})` })
   const str = (tag: number) => {
     try {
       return tiff.string(first.entries.get(tag))

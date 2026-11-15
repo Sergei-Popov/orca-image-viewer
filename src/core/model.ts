@@ -47,6 +47,11 @@ export interface InfoItem {
   key: string
   value: InfoValue
   mono?: boolean
+  /**
+   * In a raw section (EXIF, EXR attributes), the value is the reader's own wording, such as a named
+   * value or a byte count, and is translated like other details; other raw values show as stored.
+   */
+  term?: boolean
 }
 
 export interface InfoSection {

@@ -303,11 +303,13 @@ export async function openExr(bytes: Uint8Array, platform: Platform): Promise<De
         const { text, value } = attrValue(new Reader(bytes.subarray(0, start + size), true, start), type, size, start)
         if (value !== null) values.set(name, value)
         if (type === 'int') values.set(name, new DataView(bytes.buffer, bytes.byteOffset + start, 4).getInt32(0, true))
-        if (name !== 'channels') attrs.push({ key: name, value: text.slice(0, 600) })
-        else attrs.unshift({ key: name, value: text })
+        // String attributes are the file's text; the others are written by the reader.
+        const term = type !== 'string' && type !== 'stringvector'
+        if (name !== 'channels') attrs.push({ key: name, value: text.slice(0, 600), term })
+        else attrs.unshift({ key: name, value: text, term })
       } catch (error) {
         if (name === 'channels' || name === 'dataWindow') throw error
-        attrs.push({ key: name, value: `${type} (unreadable)` })
+        attrs.push({ key: name, value: `${type} (unreadable)`, term: true })
       }
       r.seek(start + size)
     }

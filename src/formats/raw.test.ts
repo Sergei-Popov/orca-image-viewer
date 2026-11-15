@@ -369,3 +369,57 @@ test('RAW (Leaf MOS): a preview found by scanning, the camera named only in XMP'
   assert.equal(doc.desc.images[0].label, 'Largest preview · 332×244')
   assert.equal(item(doc.desc, 'camera', 'camera'), 'Leaf Aptus 22(LF00000)/Mamiya 645 AFD')
 })
+
+test('RAW details in Russian: sensor, orientation and EXIF named values translated; byte counts in Russian format', async () => {
+  const { englishLeft } = await import('../fixtures/russian')
+  const { infoValue, stringsFor } = await import('../i18n')
+  const sensor = sensorIfd(4000, 3000, 16, 7)
+  sensor.entries.push({ tag: 50717, type: 3, values: [4095] })
+  const file = tiff([
+    {
+      entries: [
+        ...rgbThumb(48, 36, [10, 20, 30]).entries,
+        ...camera('Test Camera Co', 'TC-1'),
+        { tag: 274, type: 3, values: [8] },
+        { tag: 50706, type: 1, values: [1, 4, 0, 0] },
+        {
+          tag: 34665,
+          ifd: {
+            entries: [
+              { tag: 0x829a, type: 5, values: [1, 250] },
+              { tag: 0x8822, type: 3, values: [3] },
+              { tag: 0x9207, type: 3, values: [5] },
+              { tag: 0x9208, type: 3, values: [0] },
+              { tag: 0x9209, type: 3, values: [16] },
+              { tag: 0x920a, type: 5, values: [35, 1] },
+              { tag: 0xa402, type: 3, values: [2] },
+              { tag: 0xa403, type: 3, values: [0] },
+              { tag: 0xa406, type: 3, values: [1] },
+              { tag: 0xa40a, type: 3, values: [1] },
+              { tag: 0x927c, bytes: new Uint8Array(1234) },
+              { tag: 0xa430, text: 'Normal' }
+            ]
+          }
+        },
+        { tag: 330, ifds: [sensor] }
+      ]
+    }
+  ])
+  const doc = await openDocument(file, 'dng', platform)
+  assert.deepEqual(englishLeft(doc.desc), [])
+  const exif = doc.desc.info.find((s) => s.title === 'exif')?.items ?? []
+  const ru = stringsFor('ru')
+  const shown = (key: string) => {
+    const i = exif.find((x) => x.key === key)
+    return i && (i.term ? infoValue(ru, i.key, i.value) : i.value)
+  }
+  assert.equal(shown('ExposureProgram'), 'Приоритет диафрагмы')
+  assert.equal(shown('MeteringMode'), 'Матричный')
+  assert.equal(shown('Flash'), 'Не сработала, выключена')
+  assert.equal(shown('FocalLength'), '35 мм')
+  // Russian groups digits with a no-break space.
+  assert.equal(shown('MakerNote'), '1\u00a0234 байта')
+  // Text from the file stays as written, even a word the tables know.
+  assert.equal(shown('OwnerName'), 'Normal')
+  assert.equal(infoValue(stringsFor('en'), 'MakerNote', '1234 bytes'), '1,234 bytes')
+})

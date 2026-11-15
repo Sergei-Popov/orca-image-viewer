@@ -109,3 +109,12 @@ test('ICNS damaged: bad header, cut-off RLE shows what was read', async () => {
   assert.equal(r.data[0], 250)
   assert.equal(r.data[3], 255)
 })
+
+test('ICNS details in Russian: bit depths and other entries’ byte counts translated', async () => {
+  const { englishLeft } = await import('../fixtures/russian')
+  const icn = new Uint8Array(256)
+  const icl8 = new Uint8Array(1024)
+  const argb = new Uint8Array([0x41, 0x52, 0x47, 0x42, ...rleChannel(200, 256, []), ...rleChannel(10, 256, []), ...rleChannel(20, 256, []), ...rleChannel(30, 256, [])])
+  const doc = await openDocument(icns([['ICN#', icn], ['icl8', icl8], ['ic04', argb], ['slct', new Uint8Array(2543)]], [['ic04', argb]]), 'icns', stubDecoder)
+  assert.deepEqual(englishLeft(doc.desc), [])
+})

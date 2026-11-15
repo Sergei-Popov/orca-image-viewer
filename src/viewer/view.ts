@@ -592,10 +592,13 @@ export class ImageView {
     const limit = 40
     const add = (items: typeof s.items) => {
       for (const item of items) {
-        // Raw sections (EXIF, XMP, EXR attributes, maker notes) show names and values as stored.
+        // Raw sections (EXIF, XMP, EXR attributes, maker notes) show names as stored, and values
+        // too unless the reader wrote them (named values, byte counts).
         const key = s.raw ? item.key : label(t, item.key)
         const value = s.raw
-          ? item.value
+          ? item.term
+            ? infoValue(t, item.key, item.value)
+            : item.value
           : item.key === 'fileSize' && /^\d+$/.test(item.value)
             ? formatSize(Number(item.value), this.locale, t.units)
             : infoValue(t, item.key, item.value)
