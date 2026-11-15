@@ -2,7 +2,7 @@ import { assert, test } from 'orca/testing'
 import { inflate } from '../core/inflate'
 import type { DocDesc } from '../core/model'
 import { openDocument } from '../core/session'
-import { miniJpeg, tiff } from '../fixtures/tiff'
+import { miniJpeg, tiff, type TiffIfd, type TiffValue } from '../fixtures/tiff'
 import { ByteWriter } from '../fixtures/writer'
 
 /** Decodes JPEGs as a flat grey image of the size their header states. */
@@ -218,4 +218,154 @@ test('RAW damaged: no preview at all, and a cut-off file keeps the previews befo
     doc.desc.images.map((i) => i.label),
     ['Largest preview · 160×120']
   )
+})
+
+// ---------------------------------------------------------------- more TIFF-based RAW layouts
+
+/** An uncompressed 8-bit RGB thumbnail IFD filled with one colour. */
+function rgbThumb(w: number, h: number, rgb: number[], extra: TiffValue[] = []): TiffIfd {
+  const strip = new Uint8Array(w * h * 3)
+  for (let i = 0; i < w * h; i++) strip.set(rgb, i * 3)
+  return {
+    entries: [
+      { tag: 254, type: 4, values: [1] },
+      { tag: 256, type: 3, values: [w] },
+      { tag: 257, type: 3, values: [h] },
+      { tag: 258, type: 3, values: [8, 8, 8] },
+      { tag: 259, type: 3, values: [1] },
+      { tag: 262, type: 3, values: [2] },
+      { tag: 273, data: [strip] },
+      { tag: 277, type: 3, values: [3] },
+      { tag: 278, type: 3, values: [h] },
+      { tag: 279, type: 4, values: [strip.length] },
+      ...extra
+    ]
+  }
+}
+
+/** A colour-filter-array sensor IFD (no data: only its description is read). */
+function sensorIfd(w: number, h: number, bits: number, compression: number): TiffIfd {
+  return {
+    entries: [
+      { tag: 254, type: 4, values: [0] },
+      { tag: 256, type: 4, values: [w] },
+      { tag: 257, type: 4, values: [h] },
+      { tag: 258, type: 3, values: [bits] },
+      { tag: 259, type: 3, values: [compression] },
+      { tag: 262, type: 3, values: [32803] },
+      { tag: 277, type: 3, values: [1] }
+    ]
+  }
+}
+
+const camera = (make: string, model: string): TiffValue[] => [
+  { tag: 271, text: make },
+  { tag: 272, text: model }
+]
+
+test('RAW (Sony SR2): the IFD0 JPEG preview and the sensor in a sub-IFD', async () => {
+  const big = miniJpeg(640, 424)
+  const file = tiff([
+    {
+      entries: [
+        ...camera('SONY', 'DSC-R1'),
+        { tag: 513, data: [big] },
+        { tag: 514, type: 4, values: [big.length] },
+        { tag: 330, ifds: [sensorIfd(3984, 2608, 16, 1)] }
+      ]
+    }
+  ])
+  const doc = await openDocument(file, 'sr2', platform)
+  assert.equal(doc.desc.format, 'Sony SR2')
+  assert.equal(doc.desc.images[0].label, 'Largest preview · 640×424')
+  assert.equal(item(doc.desc, 'image', 'sensor'), '3984 × 2608')
+  assert.equal(item(doc.desc, 'camera', 'camera'), 'SONY DSC-R1')
+})
+
+test('RAW (Olympus ORI): the "IIRO" header, a preview found by scanning, turned by the orientation tag', async () => {
+  const file = concat(tiff([{ entries: [...camera('OLYMPUS IMAGING CORP.', 'E-M5MarkII'), { tag: 274, type: 3, values: [6] }] }], { magic: 0x4f52 }), miniJpeg(320, 240))
+  const doc = await openDocument(file, 'ori', platform)
+  assert.equal(doc.desc.format, 'Olympus ORI')
+  assert.equal(doc.desc.images[0].label, 'Largest preview · 240×320')
+  const r = await doc.decode(0)
+  assert.deepEqual([r.width, r.height], [240, 320])
+})
+
+test('RAW (Leica RWL): the "IIU" header and the JPEG in IFD0 tag 0x2e', async () => {
+  const jpeg = miniJpeg(1920, 1080)
+  const file = tiff([{ entries: [...camera('LEICA', 'D-LUX 5'), { tag: 0x2e, bytes: jpeg }] }], { magic: 0x55 })
+  const doc = await openDocument(file, 'rwl', platform)
+  assert.equal(doc.desc.format, 'Leica RWL')
+  assert.equal(doc.desc.images[0].label, 'Largest preview · 1920×1080')
+  assert.equal(item(doc.desc, 'camera', 'camera'), 'LEICA D-LUX 5')
+})
+
+test('RAW (Phase One IIQ): an uncompressed RGB preview in IFD0, turned by the orientation tag', async () => {
+  const file = tiff([rgbThumb(40, 32, [10, 20, 30], [...camera('Phase One A/S', 'P40+'), { tag: 274, type: 3, values: [6] }])])
+  const doc = await openDocument(file, 'iiq', platform)
+  assert.equal(doc.desc.format, 'Phase One IIQ')
+  assert.equal(doc.desc.images[0].label, 'Largest preview · 32×40')
+  assert.equal(item(doc.desc, 'camera', 'camera'), 'Phase One A/S P40+')
+  const r = await doc.decode(0)
+  assert.deepEqual([r.width, r.height], [32, 40])
+  assert.deepEqual(Array.from(r.data.subarray(0, 3)), [10, 20, 30])
+})
+
+test('RAW (Epson ERF): big-endian, an RGB thumbnail, a packed 12-bit sensor, an Olympus-style maker note', async () => {
+  // "EPSON", a version, then an IFD in the file's byte order with one short text tag held inline.
+  const note = new ByteWriter(false).ascii('EPSON').u8(0).u16(0x0100).u16(1).u16(0x020d).u16(2).u32(4).ascii('SS3').u8(0).u32(0).done()
+  const exif: TiffValue = { tag: 34665, ifd: { entries: [{ tag: 0x927c, bytes: note }] } }
+  const file = tiff([rgbThumb(48, 36, [200, 150, 100], [...camera('SEIKO EPSON CORP.', 'R-D1'), exif, { tag: 330, ifds: [sensorIfd(3040, 2024, 12, 32769)] }])], { little: false })
+  const doc = await openDocument(file, 'erf', platform)
+  assert.equal(doc.desc.format, 'Epson ERF')
+  assert.equal(item(doc.desc, 'image', 'sensor'), '3040 × 2024')
+  assert.equal(item(doc.desc, 'image', 'bitDepth'), '12-bit')
+  assert.equal(item(doc.desc, 'image', 'compression'), 'Packed')
+  assert.equal(item(doc.desc, 'makernote', 'Maker'), 'Epson')
+  assert.equal(item(doc.desc, 'makernote', 'Tag 0x020D'), 'SS3')
+  const r = await doc.decode(0)
+  assert.deepEqual(Array.from(r.data.subarray(0, 3)), [200, 150, 100])
+})
+
+test('RAW (Kodak KDC): a JPEG-compressed IFD0 that points at a full-size JPEG', async () => {
+  const big = miniJpeg(3264, 2448)
+  const file = tiff([
+    {
+      entries: [
+        ...camera('EASTMAN KODAK COMPANY', 'KODAK P880 ZOOM DIGITAL CAMERA'),
+        { tag: 259, type: 3, values: [7] },
+        { tag: 262, type: 3, values: [6] },
+        { tag: 513, data: [big] },
+        { tag: 514, type: 4, values: [big.length] }
+      ]
+    }
+  ])
+  const doc = await openDocument(file, 'kdc', platform)
+  assert.equal(doc.desc.format, 'Kodak KDC')
+  assert.equal(doc.desc.images[0].label, 'Largest preview · 3264×2448')
+})
+
+test('RAW (Leaf MOS): a preview found by scanning, the camera named only in XMP', async () => {
+  const xmp = ascii(
+    '<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">' +
+      '<rdf:Description rdf:about="" xmlns:tiff="http://ns.adobe.com/tiff/1.0/">' +
+      '<tiff:Make>Leaf</tiff:Make><tiff:Model>Leaf Aptus 22(LF00000    )/Mamiya 645 AFD</tiff:Model>' +
+      '</rdf:Description></rdf:RDF></x:xmpmeta>'
+  )
+  const sensor: TiffIfd = {
+    entries: [
+      { tag: 256, type: 4, values: [5344] },
+      { tag: 257, type: 4, values: [4008] },
+      { tag: 258, type: 3, values: [16] },
+      { tag: 259, type: 3, values: [99] },
+      { tag: 262, type: 3, values: [1] },
+      { tag: 305, text: 'Camera Library' },
+      { tag: 700, type: 1, bytes: xmp }
+    ]
+  }
+  const file = concat(tiff([sensor], { little: false }), miniJpeg(332, 244))
+  const doc = await openDocument(file, 'mos', platform)
+  assert.equal(doc.desc.format, 'Leaf MOS')
+  assert.equal(doc.desc.images[0].label, 'Largest preview · 332×244')
+  assert.equal(item(doc.desc, 'camera', 'camera'), 'Leaf Aptus 22(LF00000)/Mamiya 645 AFD')
 })

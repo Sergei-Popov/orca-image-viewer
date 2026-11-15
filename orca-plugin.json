@@ -32,7 +32,7 @@
       {
         "id": "raw",
         "title": "Image Viewer",
-        "extensions": [".dng", ".cr2", ".cr3", ".nef", ".nrw", ".arw", ".srf", ".raf", ".rw2", ".orf", ".pef", ".srw"],
+        "extensions": [".dng", ".cr2", ".cr3", ".nef", ".nrw", ".arw", ".srf", ".raf", ".rw2", ".orf", ".pef", ".srw", ".sr2", ".ori", ".rwl", ".iiq", ".erf", ".kdc", ".mos"],
         "entry": "src/editor.ts",
         "priority": "default",
         "contentKind": "bytes",

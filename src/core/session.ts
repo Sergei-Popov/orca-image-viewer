@@ -18,7 +18,7 @@ import type { Decoded, Platform } from './model'
 
 export type FormatKey = 'tiff' | 'raw' | 'psd' | 'exr' | 'hdr' | 'tga' | 'dds' | 'qoi' | 'icns' | 'heif' | 'native'
 
-const RAW_TYPES = new Set(['dng', 'cr2', 'cr3', 'nef', 'nrw', 'arw', 'srf', 'sr2', 'raf', 'rw2', 'orf', 'pef', 'srw'])
+const RAW_TYPES = new Set(['dng', 'cr2', 'cr3', 'nef', 'nrw', 'arw', 'srf', 'sr2', 'raf', 'rw2', 'orf', 'pef', 'srw', 'ori', 'rwl', 'iiq', 'erf', 'kdc', 'mos'])
 
 export function isRawType(fileType: string | undefined): boolean {
   return RAW_TYPES.has((fileType ?? '').toLowerCase().replace(/^\./, ''))
