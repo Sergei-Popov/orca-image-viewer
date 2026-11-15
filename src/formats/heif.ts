@@ -507,7 +507,8 @@ export async function openHeif(bytes: Uint8Array, platform: Platform): Promise<D
     const description = heif.bytes.subarray(config.body, config.end)
     const codecName = kind === 'hvc1' ? hevcCodec(description) : av1Codec(description)
     if (!decoder || !(await decoder.supported(codecName, description))) {
-      throw new ImageError('no-decoder', `${kind === 'hvc1' ? 'HEVC' : 'AV1'} (${codecName})`)
+      console.warn('[image-viewer] no system decoder for', codecName)
+      throw new ImageError('no-video-decoder', kind === 'hvc1' ? 'HEVC' : 'AV1')
     }
     const sizes = list.map((it) => itemSize(heif, it))
     const color = colourOf(heif, list).color

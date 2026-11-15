@@ -8,7 +8,7 @@ import type { DocDesc, ImageDesc, InfoSection, LayerDesc, Raster } from '../core
 import { encodePng } from '../core/png'
 import type { Thumbnail } from '../core/protocol'
 import { append, h, svg } from '../dom'
-import { errorDetail, fill, formatSize, imageText, infoValue, label, type Strings, valueText } from '../i18n'
+import { errorDetail, errorHint, fill, formatSize, imageText, infoValue, label, type Strings, valueText } from '../i18n'
 import { icon, type IconName } from '../icons'
 import {
   autoTone,
@@ -244,7 +244,8 @@ export class ImageView {
       console.warn('[image-viewer] cannot decode', error)
       this.raster = null
       this.viewport.clear()
-      this.showOverlay(describeError(error, this.t), false)
+      const hint = error instanceof ImageError ? errorHint(this.t, error.code, error.detail) : ''
+      this.showOverlay(describeError(error, this.t), false, hint)
       this.renderInfo()
       return
     }
@@ -479,8 +480,10 @@ export class ImageView {
     this.notice.hidden = false
   }
 
-  private showOverlay(text: string, busy: boolean): void {
-    this.overlay.replaceChildren(h('div', { className: 'iv-pill' }, busy ? h('div', { className: 'iv-spinner' }) : svg(icon('warning')), h('span', {}, text)))
+  /** A message over the stage; with a hint it becomes a small card with a second, quieter line. */
+  private showOverlay(text: string, busy: boolean, hint = ''): void {
+    const body = hint ? h('div', {}, h('div', { className: 'iv-pill-title' }, text), h('div', { className: 'iv-pill-hint' }, hint)) : h('span', {}, text)
+    this.overlay.replaceChildren(h('div', { className: hint ? 'iv-pill iv-card' : 'iv-pill' }, busy ? h('div', { className: 'iv-spinner' }) : svg(icon('warning')), body))
     this.overlay.hidden = false
   }
 

@@ -11,6 +11,8 @@ export type ErrorCode =
   | 'unsupported-feature'
   | 'too-large'
   | 'no-decoder'
+  /** WebCodecs has no decoder for the codec family in `detail` (HEVC, AV1) on this system. */
+  | 'no-video-decoder'
   | 'decode-failed'
   | 'text-file'
 

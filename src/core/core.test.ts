@@ -193,3 +193,15 @@ test('Error details in Russian: phrases, patterns and damaged parts; English as 
     assert.equal(errorDetail(en, detail), detail)
   }
 })
+
+test('No HEVC decoder: a plain message naming the codec, and a hint for HEVC only', async () => {
+  const { errorHint, fill, stringsFor } = await import('../i18n')
+  for (const t of [stringsFor('en'), stringsFor('ru')]) {
+    const message = fill(t.errors['no-video-decoder'], { detail: 'HEVC' })
+    assert.ok(message.includes('HEVC') && !message.includes('{'))
+    assert.equal(errorHint(t, 'no-video-decoder', 'HEVC'), t.hevcHint)
+    assert.ok(/Windows/.test(t.hevcHint) && /Linux/.test(t.hevcHint) && /Mac/.test(t.hevcHint))
+    assert.equal(errorHint(t, 'no-video-decoder', 'AV1'), '')
+    assert.equal(errorHint(t, 'decode-failed', 'HEVC'), '')
+  }
+})
