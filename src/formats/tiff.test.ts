@@ -111,6 +111,27 @@ test('TIFF pages: RGB strips, 16-bit grey LZW with predictor, 4-bit palette Pack
   assert.ok(!r1.partial && !r2.partial && !r3.partial)
 })
 
+test('TIFF tiles stored through StripOffsets and StripByteCounts (old SGI writers) are read as tiles', async () => {
+  // A 20 × 20 grey image in four 16 × 16 tiles; tile k holds 10·k + its row within the tile.
+  const tile = (k: number) => range(256, (i) => 10 * k + (i >> 4))
+  const data = [0, 1, 2, 3].map(tile)
+  const entries: TiffValue[] = [
+    { tag: 256, type: 4, values: [20] },
+    { tag: 257, type: 4, values: [20] },
+    { tag: 258, type: 3, values: [8] },
+    { tag: 259, type: 3, values: [1] },
+    { tag: 262, type: 3, values: [1] },
+    { tag: 273, data },
+    { tag: 277, type: 3, values: [1] },
+    { tag: 279, type: 4, values: data.map((b) => b.length) },
+    { tag: 322, type: 3, values: [16] },
+    { tag: 323, type: 3, values: [16] }
+  ]
+  const r = await (await openDocument(tiff([{ entries }]), 'tif', platform)).decode(0)
+  const at = (x: number, y: number) => r.data[y * r.width + x]
+  assert.deepEqual([at(0, 0), at(15, 5), at(16, 0), at(19, 15), at(0, 16), at(17, 19)], [0, 5, 10, 25, 20, 33])
+})
+
 test('TIFF tiles: big-endian 16-bit RGB in separate planes, Deflate, edge tiles', async () => {
   const W = 20
   const H = 10
@@ -264,7 +285,9 @@ test('TIFF metadata: EXIF camera details, XMP and the ICC profile', async () => 
       { tag: 272, text: 'Model 9' },
       { tag: 700, type: 1, bytes: new TextEncoder().encode(xmp) },
       { tag: 34675, bytes: icc('Test RGB profile') },
-      { tag: 34665, ifd: { entries: [{ tag: 0x829a, type: 5, values: [1, 125] }, { tag: 0x8827, type: 3, values: [400] }] } }
+      { tag: 34665, ifd: { entries: [{ tag: 0x829a, type: 5, values: [1, 125] }, { tag: 0x8827, type: 3, values: [400] }] } },
+      // GPS time with a fraction of a second: 23:59:30.5.
+      { tag: 34853, ifd: { entries: [{ tag: 7, type: 5, values: [23, 1, 59, 1, 305, 10] }, { tag: 29, text: '2024:02:29' }] } }
     ]
   })
   const doc = await openDocument(tiff([ifd]), 'tif', platform)
@@ -274,6 +297,7 @@ test('TIFF metadata: EXIF camera details, XMP and the ICC profile', async () => 
   assert.equal(item(d, 'xmp', 'dc:creator'), 'Test Person')
   assert.ok(item(d, 'camera', 'camera')?.includes('Model 9'))
   assert.ok(item(d, 'camera', 'exposure')?.includes('1/125 s'))
+  assert.equal(item(d, 'gps', 'gpsTime'), '2024-02-29 23:59:30.5 UTC')
 })
 
 test('BigTIFF: 64-bit offsets and counts', async () => {

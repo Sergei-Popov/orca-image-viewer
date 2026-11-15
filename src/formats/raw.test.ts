@@ -20,6 +20,8 @@ const platform = {
 const item = (desc: DocDesc, section: string, key: string) => desc.info.find((s) => s.title === section)?.items.find((i) => i.key === key)?.value
 
 const ascii = (s: string) => new TextEncoder().encode(s)
+/** Where a Latin-1 string first occurs in the bytes. */
+const latin1Index = (bytes: Uint8Array, s: string) => Array.from(bytes, (b) => String.fromCharCode(b)).join('').indexOf(s)
 const concat = (...parts: Uint8Array[]) => {
   const w = new ByteWriter(false)
   for (const p of parts) w.bytes(p)
@@ -129,11 +131,14 @@ test('RAW (Fujifilm RAF): the JPEG carries EXIF, its own orientation and the mak
   const doc = await openDocument(w.done(), 'raf', platform)
   const d = doc.desc
   assert.equal(d.format, 'Fujifilm RAF')
-  // The browser turns a JPEG with its own orientation, so the size stays as stored.
+  // The browser turns a JPEG with its own orientation (8: a quarter turn), so the size is swapped.
   assert.deepEqual(
-    d.images.map((i) => `${i.width}×${i.height}`),
-    ['300×200']
+    d.images.map((i) => [i.width, i.height, i.label]),
+    [[200, 300, 'Largest preview · 200×300']]
   )
+  assert.equal(item(d, 'image', 'preview'), '200 × 300')
+  assert.equal(d.images[0].info.find((i) => i.key === 'dimensions')?.value, '200 × 300')
+  assert.deepEqual(d.notices, [{ code: 'raw-preview', detail: '200 × 300' }])
   assert.equal(item(d, 'makernote', 'Quality'), 'NORMAL')
   assert.equal(item(d, 'makernote', 'Internal serial number'), 'FF02TEST')
   assert.equal(item(d, 'image', 'model'), 'X-TEST')
@@ -291,21 +296,35 @@ test('RAW (Olympus ORI): the "IIRO" header, a preview found by scanning, turned 
   assert.deepEqual([r.width, r.height], [240, 320])
 })
 
-test('RAW (Leica RWL): the "IIU" header and the JPEG in IFD0 tag 0x2e', async () => {
-  const jpeg = miniJpeg(1920, 1080)
-  const file = tiff([{ entries: [...camera('LEICA', 'D-LUX 5'), { tag: 0x2e, bytes: jpeg }] }], { magic: 0x55 })
+test('RAW (Leica RWL): the "IIU" header, the JPEG in IFD0 tag 0x2e, ISO in tag 0x17 and the JPEG\'s EXIF', async () => {
+  // The embedded JPEG's EXIF has ISO and the 35 mm focal length; the RAW's own EXIF has neither.
+  const jpegExif = tiff([{ entries: [{ tag: 34665, ifd: { entries: [{ tag: 0x8827, type: 3, values: [100] }, { tag: 0xa405, type: 3, values: [31] }] } }] }])
+  const jpeg = miniJpeg(1920, 1080, jpegExif)
+  const exif: TiffValue = { tag: 34665, ifd: { entries: [{ tag: 0x829a, type: 5, values: [1, 500] }, { tag: 0x920a, type: 5, values: [55, 10] }] } }
+  const file = tiff([{ entries: [...camera('LEICA', 'D-LUX 5'), { tag: 0x17, type: 3, values: [80] }, { tag: 0x2e, bytes: jpeg }, exif] }], { magic: 0x55 })
   const doc = await openDocument(file, 'rwl', platform)
   assert.equal(doc.desc.format, 'Leica RWL')
   assert.equal(doc.desc.images[0].label, 'Largest preview · 1920×1080')
   assert.equal(item(doc.desc, 'camera', 'camera'), 'LEICA D-LUX 5')
+  // ISO from IFD0 tag 0x17 comes before the JPEG's.
+  assert.equal(item(doc.desc, 'camera', 'exposure'), '1/500 s · ISO 80')
+  assert.equal(item(doc.desc, 'camera', 'focalLength'), '5.5 mm (35 mm equivalent: 31 mm)')
 })
 
-test('RAW (Phase One IIQ): an uncompressed RGB preview in IFD0, turned by the orientation tag', async () => {
-  const file = tiff([rgbThumb(40, 32, [10, 20, 30], [...camera('Phase One A/S', 'P40+'), { tag: 274, type: 3, values: [6] }])])
+test('RAW (Phase One IIQ): an uncompressed RGB preview in IFD0, turned by the orientation tag; the lens from Phase One\'s block', async () => {
+  // Phase One's block as the maker note: "IIIICwaR", the directory at 12, two 16-byte entries
+  // (tag, type, size, offset from the block), then their strings.
+  const lens = 'Test Optics 80mm f/2.8'
+  const block = new ByteWriter(true).ascii('IIIICwaR').u32(12).u32(2).u32(0)
+  block.u32(0x410).u32(1).u32(6).u32(52).u32(0x412).u32(1).u32(lens.length + 1).u32(58)
+  block.ascii('645DF').u8(0).ascii(lens).u8(0)
+  const exif: TiffValue = { tag: 34665, ifd: { entries: [{ tag: 0x829a, type: 5, values: [1, 200] }, { tag: 0x927c, bytes: block.done() }] } }
+  const file = tiff([rgbThumb(40, 32, [10, 20, 30], [...camera('Phase One A/S', 'P40+'), { tag: 274, type: 3, values: [6] }, exif])])
   const doc = await openDocument(file, 'iiq', platform)
   assert.equal(doc.desc.format, 'Phase One IIQ')
   assert.equal(doc.desc.images[0].label, 'Largest preview · 32×40')
   assert.equal(item(doc.desc, 'camera', 'camera'), 'Phase One A/S P40+')
+  assert.equal(item(doc.desc, 'camera', 'lens'), lens)
   const r = await doc.decode(0)
   assert.deepEqual([r.width, r.height], [32, 40])
   assert.deepEqual(Array.from(r.data.subarray(0, 3)), [10, 20, 30])
@@ -327,6 +346,29 @@ test('RAW (Epson ERF): big-endian, an RGB thumbnail, a packed 12-bit sensor, an 
   assert.deepEqual(Array.from(r.data.subarray(0, 3)), [200, 150, 100])
 })
 
+test('RAW (Epson ERF): the maker-note preview whose first byte is 0xEE, not 0xFF, is repaired and shown', async () => {
+  // An Epson note with tag 0x280 pointing (from the file's TIFF start) at a JPEG right after the IFD.
+  const preview = miniJpeg(640, 424)
+  preview[0] = 0xee
+  const note = new ByteWriter(false).ascii('EPSON').u8(0).u16(0x0100).u16(1).u16(0x0280).u16(7).u32(preview.length).u32(0).u32(0).bytes(preview).done()
+  const exif: TiffValue = { tag: 34665, ifd: { entries: [{ tag: 0x927c, bytes: note }] } }
+  const file = tiff([rgbThumb(160, 120, [200, 150, 100], [...camera('SEIKO EPSON CORP.', 'R-D1'), exif])], { little: false })
+  const at = latin1Index(file, 'EPSON\0')
+  new DataView(file.buffer, file.byteOffset).setUint32(at + 18, at + 26)
+  let first = -1
+  const watching = { ...platform, decodeImage: async (data: Uint8Array) => ((first = data[0]), platform.decodeImage(data)) }
+  const doc = await openDocument(file, 'erf', watching)
+  assert.deepEqual(
+    doc.desc.images.map((i) => i.label),
+    ['Largest preview · 640×424', 'Thumbnail · 160×120']
+  )
+  const r = await doc.decode(0)
+  assert.equal(first, 0xff)
+  assert.deepEqual([r.width, r.height], [640, 424])
+  // The file itself is left as it is.
+  assert.equal(file[at + 26], 0xee)
+})
+
 test('RAW (Kodak KDC): a JPEG-compressed IFD0 that points at a full-size JPEG', async () => {
   const big = miniJpeg(3264, 2448)
   const file = tiff([
@@ -345,11 +387,15 @@ test('RAW (Kodak KDC): a JPEG-compressed IFD0 that points at a full-size JPEG', 
   assert.equal(doc.desc.images[0].label, 'Largest preview · 3264×2448')
 })
 
-test('RAW (Leaf MOS): a preview found by scanning, the camera named only in XMP', async () => {
+test('RAW (Leaf MOS): a preview found by scanning, the camera and exposure named only in XMP', async () => {
+  // Shutter speed and aperture as APEX values, ISO as a list, the date in ISO 8601.
   const xmp = ascii(
     '<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">' +
-      '<rdf:Description rdf:about="" xmlns:tiff="http://ns.adobe.com/tiff/1.0/">' +
+      '<rdf:Description rdf:about="" xmlns:tiff="http://ns.adobe.com/tiff/1.0/" xmlns:exif="http://ns.adobe.com/exif/1.0/">' +
       '<tiff:Make>Leaf</tiff:Make><tiff:Model>Leaf Aptus 22(LF00000    )/Mamiya 645 AFD</tiff:Model>' +
+      '<exif:ISOSpeedRatings><rdf:Seq><rdf:li>25</rdf:li></rdf:Seq></exif:ISOSpeedRatings>' +
+      '<exif:ApertureValue>39/6</exif:ApertureValue><exif:ShutterSpeedValue>42/6</exif:ShutterSpeedValue>' +
+      '<exif:FocalLength>80/1</exif:FocalLength><exif:DateTimeOriginal>2021-03-04T05:06:07+02:00</exif:DateTimeOriginal>' +
       '</rdf:Description></rdf:RDF></x:xmpmeta>'
   )
   const sensor: TiffIfd = {
@@ -368,6 +414,10 @@ test('RAW (Leaf MOS): a preview found by scanning, the camera named only in XMP'
   assert.equal(doc.desc.format, 'Leaf MOS')
   assert.equal(doc.desc.images[0].label, 'Largest preview · 332×244')
   assert.equal(item(doc.desc, 'camera', 'camera'), 'Leaf Aptus 22(LF00000)/Mamiya 645 AFD')
+  // Tv 7 is 1/128 s; Av 6.5 is f/2^3.25 = f/9.5.
+  assert.equal(item(doc.desc, 'camera', 'exposure'), '1/128 s · f/9.5 · ISO 25')
+  assert.equal(item(doc.desc, 'camera', 'focalLength'), '80 mm')
+  assert.equal(item(doc.desc, 'camera', 'taken'), '2021-03-04 05:06:07 +02:00')
 })
 
 test('RAW details in Russian: sensor, orientation and EXIF named values translated; byte counts in Russian format', async () => {

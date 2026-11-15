@@ -9,9 +9,9 @@ import { ImageError, unsupportedFeature } from '../core/errors'
 import type { Decoded, ImageDesc, InfoItem, InfoSection, Platform, Raster } from '../core/model'
 import { raster } from '../core/model'
 import { dropAlpha, orient } from '../core/pixels'
-import { exifDirs, exifFromBlock, exifSummary, type ExifSummary, genericValue } from '../meta/exif'
+import { type CameraExtras, cameraExtrasFromBlock, exifDirs, exifFromBlock, exifSummary, type ExifSummary, fillExtras, genericValue } from '../meta/exif'
 import { type Ifd, T, Tiff } from '../meta/ifd'
-import { xmpProperties, xmpSection } from '../meta/xmp'
+import { cameraExtrasFromXmp, xmpProperties, xmpSection } from '../meta/xmp'
 import { readBoxes } from './isobmff'
 import { browserDecodable, findJpegs, type JpegInfo, jpegInfo } from './jpeg'
 import { COMPRESSION_NAMES, decodeIfd, isImageIfd, readImage } from './tiff'
@@ -54,7 +54,13 @@ const RAW_COMPRESSION: Record<number, string> = {
 const CANON_UUID = '85c0b687820f11e08111f4ce462b6a48'
 
 /** A preview: a JPEG stream, or a small uncompressed TIFF image (NEF and DNG thumbnails). */
-type Preview = { kind: 'jpeg'; info: JpegInfo; source: string; rotate: number } | { kind: 'ifd'; tiff: Tiff; ifd: Ifd; width: number; height: number; source: string; rotate: number }
+/**
+ * `rotate` is the orientation the plugin applies; `shown`, the one the preview ends up in. A JPEG
+ * with `data` was repaired into that copy, and `info` counts from the copy's start.
+ */
+type Preview =
+  | { kind: 'jpeg'; info: JpegInfo; source: string; rotate: number; shown?: number; data?: Uint8Array }
+  | { kind: 'ifd'; tiff: Tiff; ifd: Ifd; width: number; height: number; source: string; rotate: number; shown?: number }
 
 const sizeOf = (p: Preview) => (p.kind === 'jpeg' ? { w: p.info.width, h: p.info.height } : { w: p.width, h: p.height })
 
@@ -230,6 +236,17 @@ export async function openRaw(bytes: Uint8Array, fileType: string | undefined, p
     if (!info || !browserDecodable(info) || info.width < 16 || info.height < 16) return
     previews.set(start, { kind: 'jpeg', info, source, rotate: 1 })
   }
+  // Epson's larger preview (maker-note tag 0x280) starts with 0xEE instead of 0xFF; exiftool puts
+  // the 0xFF back when the rest of the JPEG start follows, and so does this.
+  const addEpsonPreview = (start: number, length: number) => {
+    if (start <= 0 || length < 16 || start + length > bytes.length || previews.has(start)) return
+    if (bytes[start] === 0xff || bytes[start + 1] !== 0xd8 || bytes[start + 2] !== 0xff || bytes[start + 3] !== 0xdb) return
+    const data = bytes.slice(start, start + length)
+    data[0] = 0xff
+    const info = jpegInfo(data, 0, true)
+    if (!info || !browserDecodable(info) || info.width < 16 || info.height < 16) return
+    previews.set(start, { kind: 'jpeg', info, source: 'Maker note', rotate: 1, data })
+  }
 
   if (startsWith(bytes, 'FUJIFILMCCD-RAW')) {
     // Fujifilm: a header with the offset of a JPEG that carries the EXIF.
@@ -336,14 +353,31 @@ export async function openRaw(bytes: Uint8Array, fileType: string | undefined, p
       const dng = (ifd0 as Ifd).entries.get(50706)
       if (dng) formatName = `DNG ${tiff.values(dng, 4).join('.')}`
       else if (bytes[8] === 0x43 && bytes[9] === 0x52) formatName = 'Canon CR2'
-      summary = exifSummary(tiff, exifDirs(tiff, ifd0), { imageTags: false })
-      orientation = summary.orientation
       const xmpEntry = (ifd0 as Ifd).entries.get(T.XMP)
       if (xmpEntry) xmp = new TextDecoder().decode(tiff.raw(xmpEntry, 4 << 20))
+      const dirs = exifDirs(tiff, ifd0)
+      // Camera values the EXIF directories leave out. Panasonic and Leica (RW2, RWL) keep ISO in
+      // IFD0 tag 0x17, and ISO and the 35 mm focal length in the embedded JPEG's EXIF.
+      const extras: CameraExtras = {}
+      if (bytes[2] === 0x55) extras.iso = tiff.value((ifd0 as Ifd).entries.get(0x17)) || undefined
+      for (const p of [...previews.values()].sort((a, b) => sizeOf(b).w * sizeOf(b).h - sizeOf(a).w * sizeOf(a).h)) {
+        if (p.kind === 'jpeg' && p.info.exif) {
+          fillExtras(extras, cameraExtrasFromBlock(p.info.exif))
+          break
+        }
+      }
+      // Leaf MOS keeps them only in its XMP; Phase One names the lens only in its own block.
+      if (xmp) fillExtras(extras, cameraExtrasFromXmp(xmp))
+      const noteEntry = dirs.exif?.entries.get(0x927c)
+      if (noteEntry && !extras.lens) extras.lens = phaseOneLens(tiff.raw(noteEntry)) || undefined
+      summary = exifSummary(tiff, dirs, { imageTags: false, extras })
+      orientation = summary.orientation
       if (summary.makerNote) {
         const note = readMakerNote(tiff, summary.makerNote, summary.makerNoteAt, summary.make)
         if (note) {
           maker = makerItems(note)
+          const epson = note.vendor === 'Epson' ? note.ifd.entries.get(0x280) : undefined
+          if (epson) addEpsonPreview(note.base + epson.at, epson.count)
           // Nikon keeps a preview in its maker note (tag 0x11, offsets from the note's TIFF).
           const previewIfd = note.vendor === 'Nikon' ? note.ifd.entries.get(0x11) : undefined
           if (previewIfd) {
@@ -398,6 +432,7 @@ export async function openRaw(bytes: Uint8Array, fileType: string | undefined, p
   for (const p of list) {
     const own = p.kind === 'jpeg' && p.info.exif ? (exifFromBlock(p.info.exif)?.orientation ?? 1) : 1
     p.rotate = own > 1 ? 1 : orientation
+    p.shown = own > 1 ? own : orientation
   }
 
   // Leaf MOS names the camera only in its XMP.
@@ -417,7 +452,7 @@ export async function openRaw(bytes: Uint8Array, fileType: string | undefined, p
 
   const images: ImageDesc[] = list.map((p, id) => {
     let { w, h } = sizeOf(p)
-    if (p.rotate >= 5) [w, h] = [h, w]
+    if ((p.shown ?? 1) >= 5) [w, h] = [h, w]
     const role = id === 0 ? 'Largest preview' : w * h <= 320 * 240 ? 'Thumbnail' : 'Preview'
     return {
       id,
@@ -450,7 +485,7 @@ export async function openRaw(bytes: Uint8Array, fileType: string | undefined, p
       r = await decodeIfd(p.tiff, p.ifd, platform, { orient: false })
     } else {
       if (!platform.decodeImage) throw new ImageError('no-decoder', 'JPEG')
-      const img = await platform.decodeImage(bytes.subarray(p.info.start, p.info.end), 'image/jpeg')
+      const img = await platform.decodeImage((p.data ?? bytes).subarray(p.info.start, p.info.end), 'image/jpeg')
       r = dropAlpha(raster(img.width, img.height, 4, 'u8', img.data))
     }
     return p.rotate > 1 ? orient(r, p.rotate) : r
@@ -471,6 +506,28 @@ export async function openRaw(bytes: Uint8Array, fileType: string | undefined, p
 }
 
 /** Joins the EXIF of several blocks (CR3 keeps IFD0, EXIF and GPS apart): sections by title. */
+/**
+ * The lens named in Phase One's own block, the maker note of an IIQ ("IIIICwaR", little-endian):
+ * a directory of 16-byte entries (tag, type, size, value or offset from the block), tag 0x412.
+ */
+function phaseOneLens(note: Uint8Array): string {
+  if (note.length < 16 || latin1(note.subarray(0, 8)) !== 'IIIICwaR') return ''
+  const view = new DataView(note.buffer, note.byteOffset, note.byteLength)
+  const dir = view.getUint32(8, true)
+  if (dir + 8 > note.length) return ''
+  const count = Math.min(view.getUint32(dir, true), 4096)
+  for (let i = 0; i < count; i++) {
+    const at = dir + 8 + i * 16
+    if (at + 16 > note.length) break
+    if (view.getUint32(at, true) !== 0x412) continue
+    const size = Math.min(view.getUint32(at + 8, true), 256)
+    const start = size > 4 ? view.getUint32(at + 12, true) : at + 12
+    if (start + size > note.length) return ''
+    return latin1(note.subarray(start, start + size)).replace(/\0[^]*$/, '').trim()
+  }
+  return ''
+}
+
 function mergeSummaries(parts: ExifSummary[]): ExifSummary {
   const sections: InfoSection[] = []
   for (const p of parts) {
