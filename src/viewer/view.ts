@@ -16,10 +16,10 @@ import {
   formatFloat,
   histogram,
   initialTone,
-  isHighRange,
   pixelValues,
   renderRegion,
   type Tone,
+  toneControls,
   type ToneMap
 } from './tone'
 import { ThumbCache } from './thumbs'
@@ -391,9 +391,10 @@ export class ImageView {
     const r = this.raster
     const tone = this.tone
     this.toneGroup.replaceChildren()
-    if (!r || !tone || !isHighRange(r)) return
+    if (!r || !tone) return
     const t = this.t
-    if (r.transfer !== 'data') {
+    const controls = toneControls(r)
+    if (controls.exposure) {
       const range = h('input', {
         type: 'range',
         className: 'iv-range',
@@ -412,7 +413,7 @@ export class ImageView {
       })
       this.toneGroup.append(h('label', { className: 'iv-field', title: t.exposureHint }, svg(icon('sun')), range), ev)
     }
-    if (r.transfer === 'linear') {
+    if (controls.curve) {
       const select = h('select', { className: 'iv-select', 'aria-label': t.toneMap, title: t.toneMapHint })
       for (const m of ['aces', 'reinhard', 'clip'] as ToneMap[]) select.append(h('option', { value: m }, t.toneMaps[m]))
       select.value = tone.map
@@ -424,7 +425,7 @@ export class ImageView {
       const hi = r.transfer === 'data' ? formatFloat(tone.white) : String(Math.round(tone.white * 1000) / 1000)
       this.toneGroup.append(h('span', { className: 'iv-field' }, `${t.levels} ${lo} – ${hi}`))
     }
-    const auto = this.textButton(t.auto, r.transfer === 'linear' ? t.autoExposureHint : t.autoContrastHint, () => {
+    const auto = this.textButton(t.auto, controls.auto === 'exposure' ? t.autoExposureHint : t.autoContrastHint, () => {
       if (!this.raster || !this.tone) return
       this.applyTone(autoTone(this.raster, this.tone))
       this.buildTone()
@@ -445,7 +446,7 @@ export class ImageView {
 
   private nudgeExposure(delta: number): void {
     const r = this.raster
-    if (!r || !this.tone || !isHighRange(r) || r.transfer === 'data') return
+    if (!r || !this.tone || !toneControls(r).exposure) return
     this.applyTone({ ...this.tone, exposure: Math.max(-10, Math.min(10, Math.round((this.tone.exposure + delta) * 10) / 10)) })
     this.buildTone()
   }

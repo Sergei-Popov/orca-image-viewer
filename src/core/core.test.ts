@@ -1,7 +1,7 @@
 // The PNG writer behind "Save as PNG" and the tone pipeline that turns samples into screen pixels.
 
 import { assert, test } from 'orca/testing'
-import { autoTone, DEFAULT_TONE, formatFloat, histogram, initialTone, overview, pixelValues, renderRegion, type Tone } from '../viewer/tone'
+import { autoTone, DEFAULT_TONE, formatFloat, histogram, initialTone, overview, pixelValues, renderRegion, type Tone, toneControls } from '../viewer/tone'
 import { toHalf } from './half'
 import { inflate } from './inflate'
 import { raster, type Raster } from './model'
@@ -218,5 +218,34 @@ test('Thumbnails: a new version of the file drops the thumbnails of the old one'
   assert.equal(cache.size, 0)
   cache.set(2, 0, 'yellow page 1')
   assert.equal(cache.get(2, 0), 'yellow page 1')
+})
+
+test('Tone controls: 8-bit images get levels, Auto contrast and reset; exposure only past 8-bit display values', () => {
+  const u8 = raster(2, 1, 3, 'u8', new Uint8Array(6))
+  assert.deepEqual(toneControls(u8), { exposure: false, curve: false, auto: 'contrast' })
+  const u16 = raster(2, 1, 3, 'u16', new Uint16Array(6))
+  assert.deepEqual(toneControls(u16), { exposure: true, curve: false, auto: 'contrast' })
+  const hdr = raster(2, 1, 3, 'f32', new Float32Array(6), { transfer: 'linear' })
+  assert.deepEqual(toneControls(hdr), { exposure: true, curve: true, auto: 'exposure' })
+  const dem = raster(2, 1, 1, 'f32', new Float32Array(2), { transfer: 'data' })
+  assert.deepEqual(toneControls(dem), { exposure: false, curve: false, auto: 'contrast' })
+  // Auto contrast on an 8-bit image renders with stretched levels.
+  const ramp = raster(3, 1, 1, 'u8', Uint8Array.from([50, 125, 200]))
+  const out = new Uint8ClampedArray(12)
+  renderRegion(ramp, autoTone(ramp, DEFAULT_TONE), 0, 0, 3, 1, out)
+  assert.deepEqual([out[0], out[8]], [0, 255])
+})
+
+test('Overview: boxes stay inside the image when one side is shorter than the factor', () => {
+  // 1 × 1000: the factor is 100, so each output pixel averages 100 rows of the one column.
+  const tall = raster(1, 1000, 1, 'u8', Uint8Array.from({ length: 1000 }, (_, i) => (i < 500 ? 0 : 255)))
+  const o = overview(tall, 10)
+  assert.deepEqual([o.raster.width, o.raster.height], [1, 10])
+  assert.deepEqual(Array.from(o.raster.data), [0, 0, 0, 0, 0, 1, 1, 1, 1, 1])
+  // A million-row strip finishes in about the time of its pixel count, not factor² per pixel.
+  const strip = raster(1, 1 << 20, 1, 'u8', new Uint8Array(1 << 20).fill(9))
+  const started = Date.now()
+  overview(strip, 88)
+  assert.ok(Date.now() - started < 2000, 'linear in the pixel count')
 })
 
