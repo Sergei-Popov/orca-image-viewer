@@ -202,6 +202,20 @@ function chunks(tiff: Tiff, im: TiffImage): { list: Chunk[]; partial: boolean } 
   const list: Chunk[] = []
   let partial = false
   const size = tiff.bytes.length
+  // Missing byte counts: a chunk runs to the next chunk's offset or the end of the file, looked up
+  // in a sorted copy (files with tens of thousands of strips).
+  let sorted: number[] | null = null
+  const nextOffset = (offset: number): number => {
+    sorted ??= [...new Set(im.offsets)].sort((a, b) => a - b)
+    let lo = 0
+    let hi = sorted.length
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1
+      if (sorted[mid] > offset) hi = mid
+      else lo = mid + 1
+    }
+    return lo < sorted.length ? sorted[lo] : size
+  }
   for (let p = 0; p < planes; p++) {
     for (let t = 0; t < perPlane; t++) {
       const index = p * perPlane + t
@@ -214,11 +228,7 @@ function chunks(tiff: Tiff, im: TiffImage): { list: Chunk[]; partial: boolean } 
         continue
       }
       let count = im.counts[index]
-      if (count === undefined || count === 0) {
-        // Missing byte counts: up to the next chunk or the end of the file.
-        const later = im.offsets.filter((o) => o > offset)
-        count = (later.length ? Math.min(...later) : size) - offset
-      }
+      if (count === undefined || count === 0) count = nextOffset(offset) - offset
       const end = Math.min(size, offset + count)
       list.push({ index, plane: p, x0, y0, rows, data: tiff.bytes.subarray(offset, end), partial: end < offset + count })
       if (end < offset + count) partial = true

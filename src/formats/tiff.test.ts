@@ -330,3 +330,28 @@ test('TIFF damaged and unsupported: short header, cut-off strip, no images, JPEG
     (e: unknown) => codeOf(e) === 'unsupported-pixels'
   )
 })
+
+test('TIFF without StripByteCounts: 130,000 one-row strips run to the next offset, found in sorted order', async () => {
+  const n = 130_000
+  const strips = Array.from({ length: n }, (_, i) => Uint8Array.of(i % 251))
+  const file = tiff([
+    {
+      entries: [
+        { tag: 256, type: 3, values: [1] },
+        { tag: 257, type: 4, values: [n] },
+        { tag: 258, type: 3, values: [8] },
+        { tag: 259, type: 3, values: [1] },
+        { tag: 262, type: 3, values: [1] },
+        { tag: 273, type: 4, data: strips },
+        { tag: 277, type: 3, values: [1] },
+        { tag: 278, type: 3, values: [1] }
+      ]
+    }
+  ])
+  const started = Date.now()
+  const doc = await openDocument(file, 'tif', platform)
+  const r = await doc.decode(0)
+  assert.ok(Date.now() - started < 3000, 'no quadratic search, no spread into Math.min')
+  assert.deepEqual([r.width, r.height], [1, n])
+  assert.deepEqual([r.data[0], r.data[1], r.data[250], r.data[251], r.data[n - 1]], [0, 1, 250, 0, (n - 1) % 251])
+})
