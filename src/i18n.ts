@@ -624,10 +624,10 @@ const ru: Strings = {
     compression: 'сжатие {name}'
   },
   valueRules: {
-    exposure: [[/(\d) s\b/, '$1 с']],
+    exposure: [[/(?<n>\d) s\b/, '$<n> с']],
     focalLength: [
-      [/^([\d.]+) mm \(35 mm equivalent: (\d+) mm\)$/, '$1 мм (в пересчёте на 35 мм: $2 мм)'],
-      [/^([\d.]+) mm$/, '$1 мм']
+      [/^(?<f>[\d.]+) mm \(35 mm equivalent: (?<e>\d+) mm\)$/, '$<f> мм (в пересчёте на 35 мм: $<e> мм)'],
+      [/^(?<f>[\d.]+) mm$/, '$<f> мм']
     ],
     flash: [
       [/Did not fire/, 'Не сработала'],
@@ -648,7 +648,7 @@ const ru: Strings = {
       [/ W$/, ' з. д.']
     ],
     direction: [[/ magnetic$/, ' (магнитный)']],
-    layers: [[/\((\d+) groups?\)/, '(групп: $1)']],
+    layers: [[/\((?<n>\d+) groups?\)/, '(групп: $<n>)']],
     subfile: [
       [/reduced resolution/, 'уменьшенное разрешение'],
       [/page of a multi-page image/, 'страница многостраничного изображения'],
@@ -663,9 +663,9 @@ const ru: Strings = {
       [/ px\/cm$/, ' пикс./см']
     ],
     colorSpace: [
-      [/(\S+) primaries/, 'основные цвета $1'],
-      [/(\S+) transfer/, 'передаточная функция $1'],
-      [/(\S+) matrix/, 'матрица $1'],
+      [/(?<v>\S+) primaries/, 'основные цвета $<v>'],
+      [/(?<v>\S+) transfer/, 'передаточная функция $<v>'],
+      [/(?<v>\S+) matrix/, 'матрица $<v>'],
       [/full range/, 'полный диапазон'],
       [/video range/, 'видеодиапазон']
     ],

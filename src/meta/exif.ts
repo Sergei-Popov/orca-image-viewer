@@ -437,7 +437,7 @@ function gpsSection(tiff: Tiff, gps: Ifd | null): InfoItem[] {
 
 /** `2024:05:01 13:45:10` → `2024-05-01 13:45:10`. */
 export function exifDate(s: string): string {
-  return s.replace(/^(\d{4}):(\d{2}):(\d{2})/, '$1-$2-$3')
+  return s.replace(/^(?<y>\d{4}):(?<m>\d{2}):(?<d>\d{2})/, '$<y>-$<m>-$<d>')
 }
 
 /** EXIF from an `Exif\0\0`-prefixed or bare TIFF block (JPEG APP1, HEIF Exif item, PNG eXIf). */
