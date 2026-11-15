@@ -1,3 +1,5 @@
 node_modules/
 .orca/
 .DS_Store
+.samples/
+test-files/
