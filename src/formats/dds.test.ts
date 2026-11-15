@@ -3,6 +3,7 @@ import { decodeBc } from '../codecs/bc'
 import { halfToFloat, toHalf } from '../core/half'
 import { inflate } from '../core/inflate'
 import { openDocument } from '../core/session'
+import { sampleMax } from '../viewer/tone'
 import { bc1Block, BlockWriter, dds, rgb565 } from '../fixtures/dds'
 import { ByteWriter } from '../fixtures/writer'
 
@@ -95,6 +96,17 @@ test('DDS legacy formats: DXT1, R5G6B5, luminance with out-of-range masks, A8', 
 
   const alpha = await (await open(dds({ width: 2, height: 1, bits: 8, pfFlags: 0x2, masks: [0, 0, 0, 0xff], data: new Uint8Array([0, 99]) }))).decode(0)
   assert.deepEqual(Array.from(alpha.data), [0, 99])
+})
+
+test('DDS R10G10B10A2_UNORM: 10-bit samples on a 10-bit scale, 2-bit alpha on the same scale', async () => {
+  // R 1023, G 512, B 0, A 1 of 3; then R 0, G 1, B 341, A 3 of 3.
+  const px = (r: number, g: number, b: number, a: number) => (r | (g << 10) | (b << 20) | (a << 30)) >>> 0
+  const data = new ByteWriter(true).u32(px(1023, 512, 0, 1)).u32(px(0, 1, 341, 3)).done()
+  const r = await (await open(dds({ width: 2, height: 1, dxgi: 24, data }))).decode(0)
+  assert.equal(r.kind, 'u16')
+  assert.equal(r.bits, 10)
+  assert.equal(sampleMax(r), 1023)
+  assert.deepEqual(Array.from(r.data), [1023, 512, 0, 341, 0, 1, 341, 1023])
 })
 
 test('DDS float formats: R16G16B16A16 half stays half, R32 float is data with a range', async () => {

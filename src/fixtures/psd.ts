@@ -46,6 +46,12 @@ export interface PsdSpec {
   resolution?: number
   /** The writer named in resource 1057. */
   writer?: string
+  /** Resource 1053: one identifier per channel after the colour channels. */
+  alphaIds?: number[]
+  /** Resource 1045: Unicode names of the channels after the colour channels. */
+  alphaNames?: string[]
+  /** Resource 1006: Pascal names of the channels after the colour channels. */
+  pascalAlphaNames?: string[]
 }
 
 const bytesOf = (depth: number) => (depth === 32 ? 4 : depth === 16 ? 2 : 1)
@@ -128,6 +134,24 @@ export function psd(spec: PsdSpec): Uint8Array {
     for (const ch of writer) v.u16(ch.charCodeAt(0))
     v.u32(0).u32(1)
     resource(res, 1057, v.done())
+  }
+  if (spec.alphaNames) {
+    const v = new ByteWriter(false)
+    for (const name of spec.alphaNames) {
+      v.u32(name.length)
+      for (const ch of name) v.u16(ch.charCodeAt(0))
+    }
+    resource(res, 1045, v.done())
+  }
+  if (spec.pascalAlphaNames) {
+    const v = new ByteWriter(false)
+    for (const name of spec.pascalAlphaNames) v.u8(name.length).ascii(name)
+    resource(res, 1006, v.done())
+  }
+  if (spec.alphaIds) {
+    const v = new ByteWriter(false)
+    for (const id of spec.alphaIds) v.u32(id)
+    resource(res, 1053, v.done())
   }
   if (spec.icc) resource(res, 1039, spec.icc)
   if (spec.xmp) resource(res, 1060, new TextEncoder().encode(spec.xmp))

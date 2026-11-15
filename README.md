@@ -70,10 +70,10 @@ register them.
   the sensor size and RAW compression, and the maker's notes for Canon, Nikon, Sony, Fujifilm,
   OM System/Olympus, Panasonic, Pentax and Samsung. The viewer does **not** develop the RAW
   sensor data (no demosaicing), so what you see is the camera's own rendering, and a notice says
-  so. Some cameras and digital backs embed only a small preview (IIQ, MOS and ERF files often
-  carry about 160–330 pixels across); that is what you get for them. When the TIFF tags do not
-  name the camera, the name comes from the file's XMP. A RAW file without a preview gets a message
-  instead.
+  so. Some cameras and digital backs embed only a small preview (IIQ and MOS files often carry
+  about 300 pixels across, Epson ERF files 640); that is what you get for them. When the TIFF tags
+  do not name the camera or give the exposure, they come from the file's XMP. A RAW file without a
+  preview gets a message instead.
 
 **Not supported:** JPEG XL (`.jxl`) — every practical decoder for it is WebAssembly, which this
 plugin does not ship, so the type is not registered. RAW types whose files carry no rendered

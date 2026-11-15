@@ -110,13 +110,15 @@ export function readImage(tiff: Tiff, ifd: Ifd): TiffImage {
   const bps = bpsList[0] ?? 1
   if (bpsList.some((b) => b !== bps)) throw unsupportedPixels(`mixed bit depths (${bpsList.join(', ')})`)
   if (bps < 1 || bps > 64) throw damaged('TIFF bits per sample')
-  const tiled = !!get(T.TileOffsets)
+  // As libtiff reads it: a tile size makes the image tiled, and old writers (SGI) keep the tile
+  // offsets and byte counts in StripOffsets and StripByteCounts.
+  const tiled = !!get(T.TileWidth) || !!get(T.TileOffsets)
   const chunkWidth = tiled ? num(T.TileWidth, 0) : width
   const rps = num(T.RowsPerStrip, height)
   const chunkHeight = tiled ? num(T.TileLength, 0) : Math.min(Math.max(1, rps), height)
   if (!chunkWidth || !chunkHeight) throw damaged('TIFF tile size')
-  const offsets = tiff.values(get(tiled ? T.TileOffsets : T.StripOffsets))
-  const counts = tiff.values(get(tiled ? T.TileByteCounts : T.StripByteCounts))
+  const offsets = tiff.values(get(tiled && get(T.TileOffsets) ? T.TileOffsets : T.StripOffsets))
+  const counts = tiff.values(get(tiled && get(T.TileByteCounts) ? T.TileByteCounts : T.StripByteCounts))
   return {
     ifd,
     width,

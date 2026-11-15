@@ -305,11 +305,12 @@ function decodeUncompressed(layout: Exclude<Layout, { kind: 'bc' }>, src: Uint8A
         true,
         ['R', 'G', 'B', 'A'],
         (x, y, o, i) => {
+          // Kept as 10-bit values (the raster says so), with the 2-bit alpha on the same scale.
           const v = view.getUint32(px(x, y), true)
-          o[i] = Math.round(((v & 1023) * 65535) / 1023)
-          o[i + 1] = Math.round((((v >>> 10) & 1023) * 65535) / 1023)
-          o[i + 2] = Math.round((((v >>> 20) & 1023) * 65535) / 1023)
-          o[i + 3] = (v >>> 30) * 21845
+          o[i] = v & 1023
+          o[i + 1] = (v >>> 10) & 1023
+          o[i + 2] = (v >>> 20) & 1023
+          o[i + 3] = (v >>> 30) * 341
         },
         10
       )

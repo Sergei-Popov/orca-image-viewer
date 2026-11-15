@@ -200,3 +200,51 @@ test('PSD details in Russian: modes, depths, compression, version and group coun
   ]
   for (const file of files) assert.deepEqual(englishLeft((await openDocument(file, 'psd', platform)).desc), [])
 })
+
+test('PSD transparency: Photoshop flattened images over white are un-matted, sips files kept, 1006 spot channels not alpha', async () => {
+  // A red-pink pixel at 80% opacity, which Photoshop stores composited over white, and a clear one.
+  const stored = [fill(2, 255), Uint8Array.of(51, 255), Uint8Array.of(153, 255), Uint8Array.of(204, 0)]
+  const layer = { name: 'Layer 1', width: 1, height: 1, channels: { [-1]: fill(1, 204), 0: fill(1, 255), 1: fill(1, 0), 2: fill(1, 128) } }
+  const photoshop = await openDocument(
+    psd({ width: 2, height: 1, planes: stored, mergedAlpha: true, layers: [layer], alphaIds: [0], alphaNames: ['Transparency'], pascalAlphaNames: ['Transparency'] }),
+    'psd',
+    platform
+  )
+  const flat = await photoshop.decode(0)
+  assert.deepEqual(pixel(flat, 0, 0), [255, 0, 128, 204])
+  assert.equal(pixel(flat, 1, 0)[3], 0)
+  assert.equal(item(photoshop.desc, 'image', 'alpha'), undefined)
+  // Showing the layers instead gives the same colour, so nothing jumps when a layer is toggled.
+  const composite = await (photoshop.composite as NonNullable<typeof photoshop.composite>)([true])
+  const mixed = pixel(composite, 0, 0)
+  assert.ok(mixed.every((v, i) => Math.abs(v - [255, 0, 128, 204][i]) <= 1), `layer composite ${mixed}`)
+
+  // macOS sips names the channel only in resource 1006 and stores the colour as it is.
+  const sips = await openDocument(psd({ width: 2, height: 1, planes: stored, mergedAlpha: true, layers: [layer], pascalAlphaNames: ['Transparency'] }), 'psd', platform)
+  assert.deepEqual(pixel(await sips.decode(0), 0, 0), [255, 51, 153, 204])
+
+  // A flat 32-bit Photoshop file without layers: identifier 0 marks the transparency channel.
+  const float = await openDocument(
+    psd({ width: 1, height: 1, depth: 32, planes: [Float32Array.of(0.6), Float32Array.of(1), Float32Array.of(0.5), Float32Array.of(0.5)], alphaIds: [0], alphaNames: ['Transparency'], compression: 0 }),
+    'psd',
+    platform
+  )
+  const f = await float.decode(0)
+  assert.equal(f.channels, 4)
+  assert.deepEqual(pixel(f, 0, 0).map((v) => Math.round(v * 1000) / 1000), [0.2, 1, 0, 0.5])
+  assert.equal(item(float.desc, 'image', 'alpha'), undefined)
+
+  // Grey: (200 + 100 − 255) × 255 / 100 = 114.75.
+  const grey = await openDocument(psd({ width: 1, height: 1, mode: 1, planes: [fill(1, 200), fill(1, 100)], mergedAlpha: true, layers: [{ name: 'Layer 1', width: 1, height: 1, channels: { [-1]: fill(1, 100), 0: fill(1, 115) } }], alphaIds: [0], alphaNames: ['Transparency'] }), 'psd', platform)
+  assert.deepEqual(pixel(await grey.decode(0), 0, 0), [115, 100])
+
+  // CMYK with three spot channels named only in resource 1006: no transparency.
+  const spots = await openDocument(
+    psd({ width: 1, height: 1, mode: 4, planes: [fill(1, 255), fill(1, 255), fill(1, 255), fill(1, 255), fill(1, 0), fill(1, 128), fill(1, 255)], pascalAlphaNames: ['blue', 'fluorescent pink', 'yellow'] }),
+    'psd',
+    platform
+  )
+  const s = await spots.decode(0)
+  assert.equal(s.channels, 3)
+  assert.equal(item(spots.desc, 'image', 'alpha'), 'blue, fluorescent pink, yellow')
+})

@@ -4,6 +4,7 @@
 // unsupported. Values are scene-linear; the viewer applies exposure and a tone map.
 
 import { b44Decode, type BlockChannel, exrRleDecode, exrUnpredict, pxr24Decode } from '../codecs/exr-misc'
+import { lumaWeights, ycaToRgb } from '../codecs/exr-yca'
 import { pizDecode } from '../codecs/exr-piz'
 import { latin1, Reader } from '../core/bytes'
 import { checkSize, damaged, ImageError, unsupportedCompression, unsupportedFeature } from '../core/errors'
@@ -45,6 +46,8 @@ interface Part {
   chunkCount: number
   offsets: number[]
   attrs: InfoItem[]
+  /** Red, green, blue and white x, y, when the header has them. */
+  chromaticities: number[] | null
 }
 
 interface Level {
@@ -331,7 +334,8 @@ export async function openExr(bytes: Uint8Array, platform: Platform): Promise<De
       tiles: type.includes('tile') ? tiles : null,
       chunkCount: (values.get('chunkCount') as number | undefined) ?? 0,
       offsets: [],
-      attrs
+      attrs,
+      chromaticities: (values.get('chromaticities') as number[] | undefined) ?? null
     })
     if (!multipart) break
     if (parts.length > 1000) throw damaged('EXR part count')
@@ -561,17 +565,11 @@ export async function openExr(bytes: Uint8Array, platform: Platform): Promise<De
       }
     }
 
-    // Luminance and chroma to RGB, with Rec. 709 weights.
+    // Luminance and chroma to RGB as OpenEXR's RGBA interface does it, with the luminance weights
+    // of the file's primaries (Rec. 709 without a chromaticities attribute).
     if (view.yc) {
-      const [wr, wg, wb] = [0.2126, 0.7152, 0.0722]
-      for (let i = 0; i < W * H; i++) {
-        const Y = out[i * c]
-        const R = (out[i * c + 1] + 1) * Y
-        const B = (out[i * c + 2] + 1) * Y
-        out[i * c] = R
-        out[i * c + 1] = (Y - R * wr - B * wb) / wg
-        out[i * c + 2] = B
-      }
+      const chroma = view.yc.ry ?? view.yc.by
+      ycaToRgb(out as Float32Array, W, H, c, chroma?.xs ?? 1, chroma?.ys ?? 1, dx0, dy0, lumaWeights(part.chromaticities))
     } else if (view.colour.length === 1 && !view.data && view.colour[0]?.name.endsWith('Y')) {
       // Luminance only: grey, no conversion.
     }
@@ -612,7 +610,8 @@ async function decompressBlock(part: Part, data: Uint8Array, ax0: number, ay0: n
   const chans: BlockChannel[] = part.channels.map((ch) => ({
     nx: numSamples(ch.xs, ax0, ax0 + bw - 1),
     ny: numSamples(ch.ys, ay0, ay0 + bh - 1),
-    type: ch.type
+    type: ch.type,
+    pLinear: ch.pLinear
   }))
   const expected = chans.reduce((s, ch) => s + ch.nx * ch.ny * PIXEL_SIZE[ch.type], 0)
   if (data.length >= expected || part.compression === 0) {

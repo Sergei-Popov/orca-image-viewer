@@ -1,5 +1,6 @@
 // An OpenEXR writer for tests: single- or multi-part, scanline or tiled (one level or mipmap),
-// half/float/uint channels with x/y subsampling, NONE, RLE, ZIPS, ZIP and PXR24 compression.
+// half/float/uint channels with x/y subsampling, NONE, RLE, ZIPS, ZIP and PXR24 compression, and
+// B44A for images whose 4×4 blocks are each one value.
 
 import { exrPredict } from '../codecs/exr-misc'
 import { toHalf } from '../core/half'
@@ -11,6 +12,8 @@ export interface ExrChannelSpec {
   type?: 0 | 1 | 2
   xs?: number
   ys?: number
+  /** B44: stored as exp(value / 8), as OpenEXR does for perceptually linear channels. */
+  pLinear?: boolean
 }
 
 export interface ExrPartSpec {
@@ -23,10 +26,12 @@ export interface ExrPartSpec {
   channels: ExrChannelSpec[]
   /** The value of a channel (index into `channels`) at absolute x, y on a mip level. */
   value: (channel: number, x: number, y: number, level: number) => number
-  compression?: 0 | 1 | 2 | 3 | 5
+  compression?: 0 | 1 | 2 | 3 | 5 | 7
   tiles?: { w: number; h: number; mipmap?: boolean }
   /** A `chunkCount` attribute other than the real one (damaged headers). */
   chunkCount?: number
+  /** A `chromaticities` attribute: red, green, blue and white x, y. */
+  chromaticities?: number[]
 }
 
 /** zlib through Node's (and the browser's) CompressionStream. */
@@ -83,6 +88,38 @@ function rawBlock(part: ExrPartSpec, chans: Channel[], x0: number, y0: number, w
   return out.done()
 }
 
+/** B44A with flat blocks only: each 4×4 block of a half channel must be one value. */
+function b44aFlat(part: ExrPartSpec, chans: Channel[], x0: number, y0: number, w: number, h: number, level: number): Uint8Array {
+  const out = new ByteWriter(false)
+  for (const c of chans) {
+    const xs: number[] = []
+    const ys: number[] = []
+    for (let x = x0; x < x0 + w; x++) if (mod(x, c.xs) === 0) xs.push(x)
+    for (let y = y0; y < y0 + h; y++) if (mod(y, c.ys) === 0) ys.push(y)
+    if (c.type !== 1) {
+      const raw = new ByteWriter(true)
+      for (const y of ys) for (const x of xs) c.type === 2 ? raw.f32(part.value(c.index, x, y, level)) : raw.u32(part.value(c.index, x, y, level))
+      out.bytes(raw.done())
+      continue
+    }
+    const half = (x: number, y: number) => {
+      const v = part.value(c.index, x, y, level)
+      return toHalf(c.pLinear ? Math.exp(v / 8) : v)
+    }
+    for (let by = 0; by < ys.length; by += 4) {
+      for (let bx = 0; bx < xs.length; bx += 4) {
+        const v = half(xs[bx], ys[by])
+        for (let y = by; y < Math.min(by + 4, ys.length); y++) {
+          for (let x = bx; x < Math.min(bx + 4, xs.length); x++) if (half(xs[x], ys[y]) !== v) throw new Error('b44aFlat: a block with more than one value')
+        }
+        const t = (v & 0x7c00) === 0x7c00 ? 0x8000 : v & 0x8000 ? ~v & 0xffff : v | 0x8000
+        out.u8(t >> 8).u8(t & 255).u8(0xfc)
+      }
+    }
+  }
+  return out.done()
+}
+
 function pxr24Planes(chans: Channel[], raw: Uint8Array, x0: number, y0: number, w: number, h: number): Uint8Array {
   const view = new DataView(raw.buffer, raw.byteOffset, raw.byteLength)
   const out = new ByteWriter(false)
@@ -116,9 +153,12 @@ function pxr24Planes(chans: Channel[], raw: Uint8Array, x0: number, y0: number, 
   return out.done()
 }
 
-async function compress(part: ExrPartSpec, chans: Channel[], raw: Uint8Array, x0: number, y0: number, w: number, h: number): Promise<Uint8Array> {
+async function compress(part: ExrPartSpec, chans: Channel[], raw: Uint8Array, x0: number, y0: number, w: number, h: number, level: number): Promise<Uint8Array> {
   let packed: Uint8Array
   switch (part.compression ?? 0) {
+    case 7:
+      packed = b44aFlat(part, chans, x0, y0, w, h, level)
+      break
     case 1:
       packed = exrRleEncode(exrPredict(raw))
       break
@@ -140,7 +180,7 @@ function attr(w: ByteWriter, name: string, type: string, data: Uint8Array): void
   w.ascii(name).u8(0).ascii(type).u8(0).u32(data.length).bytes(data)
 }
 
-const LINES = [1, 1, 1, 16, 32, 16]
+const LINES = [1, 1, 1, 16, 32, 16, 32, 32]
 
 function levelSizes(part: ExrPartSpec): { w: number; h: number }[] {
   if (!part.tiles?.mipmap) return [{ w: part.width, h: part.height }]
@@ -177,7 +217,7 @@ export async function exr(spec: ExrPartSpec | ExrPartSpec[], options: { headersO
             const bx = x0 + tx * t.w
             const by = y0 + ty * t.h
             const raw = rawBlock(part, chans, bx, by, bw, bh, level)
-            const data = await compress(part, chans, raw, bx, by, bw, bh)
+            const data = await compress(part, chans, raw, bx, by, bw, bh, level)
             const head = new ByteWriter(true)
             if (multipart) head.i32(pi)
             head.i32(tx).i32(ty).i32(level).i32(level).u32(data.length)
@@ -190,7 +230,7 @@ export async function exr(spec: ExrPartSpec | ExrPartSpec[], options: { headersO
       for (let y = y0; y < y0 + part.height; y += lines) {
         const bh = Math.min(lines, y0 + part.height - y)
         const raw = rawBlock(part, chans, x0, y, part.width, bh, 0)
-        const data = await compress(part, chans, raw, x0, y, part.width, bh)
+        const data = await compress(part, chans, raw, x0, y, part.width, bh, 0)
         const head = new ByteWriter(true)
         if (multipart) head.i32(pi)
         head.i32(y).u32(data.length)
@@ -201,10 +241,15 @@ export async function exr(spec: ExrPartSpec | ExrPartSpec[], options: { headersO
 
     // Header.
     const cl = new ByteWriter(true)
-    for (const c of chans) cl.ascii(c.name).u8(0).i32(c.type).u8(0).zeros(3).i32(c.xs).i32(c.ys)
+    for (const c of chans) cl.ascii(c.name).u8(0).i32(c.type).u8(c.pLinear ? 1 : 0).zeros(3).i32(c.xs).i32(c.ys)
     cl.u8(0)
     attr(w, 'channels', 'chlist', cl.done())
     attr(w, 'compression', 'compression', new Uint8Array([part.compression ?? 0]))
+    if (part.chromaticities) {
+      const v = new ByteWriter(true)
+      for (const n of part.chromaticities) v.f32(n)
+      attr(w, 'chromaticities', 'chromaticities', v.done())
+    }
     const box = new ByteWriter(true).i32(x0).i32(y0).i32(x0 + part.width - 1).i32(y0 + part.height - 1).done()
     attr(w, 'dataWindow', 'box2i', box)
     attr(w, 'displayWindow', 'box2i', box)

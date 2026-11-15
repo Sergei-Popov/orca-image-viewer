@@ -2,6 +2,7 @@
 // (24-bit floats in byte planes) and B44/B44A (4×4 blocks of half floats in 14 or 3 bytes).
 
 import { damaged } from '../core/errors'
+import { halfToFloat, toHalf } from '../core/half'
 
 /** OpenEXR RLE: a signed count, then −n literal bytes or one byte n+1 times. */
 export function exrRleDecode(src: Uint8Array, expected: number): Uint8Array {
@@ -60,6 +61,8 @@ export interface BlockChannel {
   nx: number
   ny: number
   type: number
+  /** B44: the encoder stored exp(value / 8); the decoder turns it back with 8·ln(stored). */
+  pLinear?: boolean
 }
 
 /**
@@ -145,6 +148,22 @@ function b44Block(b: Uint8Array, at: number, s: Uint16Array): number {
   return 14
 }
 
+let logTable: Uint16Array | null = null
+
+/**
+ * OpenEXR's B44 logTable (b44ExpLogTable.cpp), which its decoder applies to pLinear channels:
+ * 8·ln(h) for every half h, and 0 for negative or non-finite h.
+ */
+function b44LogTable(): Uint16Array {
+  if (logTable) return logTable
+  logTable = new Uint16Array(65536)
+  for (let i = 0; i < 65536; i++) {
+    const h = halfToFloat(i)
+    logTable[i] = !Number.isFinite(h) || h < 0 ? 0 : toHalf(8 * Math.fround(Math.log(h)))
+  }
+  return logTable
+}
+
 /**
  * B44 and B44A: half channels in 4×4 blocks, other channels raw. Returns per-channel planes of
  * raw sample bytes (little-endian), in channel order.
@@ -163,11 +182,13 @@ export function b44Decode(data: Uint8Array, channels: readonly BlockChannel[]): 
     }
     const plane = new Uint8Array(c.nx * c.ny * 2)
     const view = new DataView(plane.buffer)
+    const log = c.pLinear ? b44LogTable() : null
     for (let by = 0; by < c.ny; by += 4) {
       for (let bx = 0; bx < c.nx; bx += 4) {
         if (at + 3 > data.length) throw damaged('B44 data')
         if (data[at + 2] < 13 << 2 && at + 14 > data.length) throw damaged('B44 data')
         at += b44Block(data, at, s)
+        if (log) for (let i = 0; i < 16; i++) s[i] = log[s[i]]
         for (let y = 0; y < 4 && by + y < c.ny; y++) {
           for (let x = 0; x < 4 && bx + x < c.nx; x++) view.setUint16(((by + y) * c.nx + bx + x) * 2, s[y * 4 + x], true)
         }

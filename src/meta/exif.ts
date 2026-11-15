@@ -223,7 +223,10 @@ function formatValue(tiff: Tiff, name: string, e: IfdEntry): string {
     case 'GPSTimeStamp': {
       const [h, m, s] = tiff.values(e, 3)
       const pad = (n: number) => String(Math.floor(n)).padStart(2, '0')
-      return `${pad(h)}:${pad(m)}:${pad(s)} UTC`
+      // Seconds keep their fraction (23:59:30.5), to the millisecond.
+      const sec = Math.round(s * 1000) / 1000
+      const fraction = sec % 1 ? String(Math.round((sec % 1) * 1000) / 1000).slice(1) : ''
+      return `${pad(h)}:${pad(m)}:${pad(sec)}${fraction} UTC`
     }
     case 'GPSAltitude':
     case 'GPSHPositioningError':
@@ -283,6 +286,76 @@ export function exifDirs(tiff: Tiff, ifd0: Ifd | null): ExifDirs {
   return { ifd0, exif, gps: sub(T.GPSIFD, ifd0), interop: sub(T.InteropIFD, exif) }
 }
 
+/**
+ * Camera values kept outside a file's own EXIF directories: in an embedded JPEG's EXIF, in XMP or
+ * in a maker's own block. They fill only what the EXIF directories leave out.
+ */
+export interface CameraExtras {
+  lens?: string
+  /** Seconds. */
+  exposureTime?: number
+  fNumber?: number
+  iso?: number
+  bias?: number
+  focal?: number
+  focal35?: number
+  /** As EXIF writes it: `2024:05:01 13:45:10`. */
+  taken?: string
+  /** `+02:00`. */
+  takenOffset?: string
+}
+
+/** Copies into `to` each value it does not have yet. */
+export function fillExtras(to: CameraExtras, from: CameraExtras | null): CameraExtras {
+  if (!from) return to
+  for (const key of Object.keys(from) as (keyof CameraExtras)[]) {
+    if ((to[key] === undefined || to[key] === '') && from[key] !== undefined && from[key] !== '') (to as Record<string, unknown>)[key] = from[key]
+  }
+  return to
+}
+
+/** The camera values of a set of EXIF directories. */
+function cameraValues(tiff: Tiff, dirs: ExifDirs): CameraExtras {
+  const { exif } = dirs
+  const str = (tag: number) => {
+    try {
+      return tiff.string(exif?.entries.get(tag)) || undefined
+    } catch {
+      return undefined
+    }
+  }
+  const num = (tag: number) => {
+    const e = exif?.entries.get(tag)
+    try {
+      return e ? tiff.value(e) || undefined : undefined
+    } catch {
+      return undefined
+    }
+  }
+  return {
+    lens: str(0xa434) || str(0xa433),
+    exposureTime: num(0x829a),
+    fNumber: num(0x829d),
+    iso: num(0x8827),
+    bias: num(0x9204),
+    focal: num(0x920a),
+    focal35: num(0xa405),
+    taken: str(0x9003),
+    takenOffset: str(0x9011)
+  }
+}
+
+/** The camera values of an `Exif\0\0` or bare TIFF block (an embedded JPEG's APP1). */
+export function cameraExtrasFromBlock(block: Uint8Array): CameraExtras | null {
+  const tiff = blockTiff(block)
+  if (!tiff) return null
+  try {
+    return cameraValues(tiff, exifDirs(tiff, tiff.readIfd(tiff.first)))
+  } catch {
+    return null
+  }
+}
+
 export interface ExifSummary {
   sections: InfoSection[]
   orientation: number
@@ -315,7 +388,7 @@ function list(tiff: Tiff, ifd: Ifd | null, names: Record<number, string>, onlyKn
 }
 
 /** EXIF, camera and GPS sections from the IFDs of a TIFF-structured block. */
-export function exifSummary(tiff: Tiff, dirs: ExifDirs, options: { imageTags: boolean } = { imageTags: true }): ExifSummary {
+export function exifSummary(tiff: Tiff, dirs: ExifDirs, options: { imageTags: boolean; extras?: CameraExtras } = { imageTags: true }): ExifSummary {
   const { ifd0, exif, gps } = dirs
   const get = (ifd: Ifd | null, tag: number) => ifd?.entries.get(tag)
   const str = (ifd: Ifd | null, tag: number) => {
@@ -341,27 +414,23 @@ export function exifSummary(tiff: Tiff, dirs: ExifDirs, options: { imageTags: bo
     const shown = model.toLowerCase().startsWith(make.toLowerCase().split(' ')[0]) ? model : `${make} ${model}`.trim()
     camera.push({ key: 'camera', value: shown })
   }
-  const lens = str(exif, 0xa434) || str(exif, 0xa433)
-  if (lens) camera.push({ key: 'lens', value: lens })
+  const own = cameraValues(tiff, dirs)
+  const v = fillExtras({ ...own }, options.extras ?? null)
+  if (v.lens) camera.push({ key: 'lens', value: v.lens })
   const parts: string[] = []
-  const t = num(exif, 0x829a)
+  const { exposureTime: t, fNumber: f, iso, bias, focal, focal35 } = v
   if (t) parts.push(exposureText(t))
-  const f = num(exif, 0x829d)
   if (f) parts.push(`f/${trimNum(f, 1)}`)
-  const iso = num(exif, 0x8827)
   if (iso) parts.push(`ISO ${iso}`)
-  const bias = num(exif, 0x9204)
   if (bias) parts.push(`${bias > 0 ? '+' : ''}${trimNum(bias, 2)} EV`)
   if (parts.length) camera.push({ key: 'exposure', value: parts.join(' · ') })
-  const focal = num(exif, 0x920a)
-  const focal35 = num(exif, 0xa405)
   if (focal) camera.push({ key: 'focalLength', value: `${trimNum(focal, 1)} mm${focal35 && focal35 !== Math.round(focal) ? ` (35 mm equivalent: ${focal35} mm)` : ''}` })
   const flash = num(exif, 0x9209)
   if (flash !== undefined) camera.push({ key: 'flash', value: flashText(flash) })
   // DateTime (0x0132) is when the file was changed; it stands in only for a camera's photo.
-  const taken = str(exif, 0x9003) || (camera.length ? str(ifd0, 0x0132) : '')
+  const taken = v.taken || (camera.length ? str(ifd0, 0x0132) : '')
   if (taken) {
-    const offset = str(exif, 0x9011)
+    const offset = (own.taken || !v.taken ? str(exif, 0x9011) : v.takenOffset) ?? ''
     camera.push({ key: 'taken', value: exifDate(taken) + (/^[+-]\d{2}:\d{2}$/.test(offset) ? ` ${offset}` : '') })
   }
   const serial = str(exif, 0xa431)
@@ -447,6 +516,18 @@ export function exifDate(s: string): string {
 
 /** EXIF from an `Exif\0\0`-prefixed or bare TIFF block (JPEG APP1, HEIF Exif item, PNG eXIf). */
 export function exifFromBlock(block: Uint8Array): ExifSummary | null {
+  const tiff = blockTiff(block)
+  if (!tiff) return null
+  try {
+    const ifd0 = tiff.readIfd(tiff.first)
+    return exifSummary(tiff, exifDirs(tiff, ifd0))
+  } catch {
+    return null
+  }
+}
+
+/** The TIFF inside an `Exif\0\0`-prefixed or bare block, or null. */
+function blockTiff(block: Uint8Array): Tiff | null {
   let start = 0
   if (block.length >= 6 && block[0] === 0x45 && block[1] === 0x78 && block[2] === 0x69 && block[3] === 0x66) start = 6
   // Some writers put a few bytes before the header: find `II*\0` or `MM\0*` close to the start.
@@ -462,9 +543,7 @@ export function exifFromBlock(block: Uint8Array): ExifSummary | null {
     start = found
   }
   try {
-    const tiff = new Tiff(block.subarray(start))
-    const ifd0 = tiff.readIfd(tiff.first)
-    return exifSummary(tiff, exifDirs(tiff, ifd0))
+    return new Tiff(block.subarray(start))
   } catch {
     return null
   }
