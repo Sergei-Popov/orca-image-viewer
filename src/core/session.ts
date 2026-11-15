@@ -6,6 +6,7 @@ import { openHeif } from '../formats/heif'
 import { isJpegXl, nativeType, openNative } from '../formats/native'
 import { isQoi, openQoi } from '../formats/qoi'
 import { looksLikeTga, openTga } from '../formats/tga'
+import { openTiff } from '../formats/tiff'
 import { latin1, startsWith } from './bytes'
 import { ImageError } from './errors'
 import type { Decoded, Platform } from './model'
@@ -67,6 +68,8 @@ export async function openDocument(bytes: Uint8Array, fileType: string | undefin
       return openRadiance(bytes)
     case 'heif':
       return openHeif(bytes, platform)
+    case 'tiff':
+      return openTiff(bytes, platform)
     case 'native': {
       const n = nativeType(bytes)
       if (n) return openNative(bytes, n.mime, n.name, platform)

@@ -127,3 +127,23 @@ export function interleave<T extends Samples>(planes: readonly T[], out: T): T {
   }
   return out
 }
+
+/** 8-bit RGBA from a browser decoder without its (opaque) alpha channel. */
+export function dropAlpha(r: Raster): Raster {
+  if (r.channels !== 4 || r.kind !== 'u8') return r
+  const n = r.width * r.height
+  const out = new Uint8Array(n * 3)
+  for (let i = 0, s = 0, d = 0; i < n; i++, s += 4, d += 3) {
+    out[d] = r.data[s]
+    out[d + 1] = r.data[s + 1]
+    out[d + 2] = r.data[s + 2]
+  }
+  return { ...r, channels: 3, data: out, alpha: false, premultiplied: false, names: ['R', 'G', 'B'] }
+}
+
+/** Whether every alpha value of an 8-bit RGBA raster is 255. */
+export function opaque(r: Raster): boolean {
+  if (!r.alpha || r.kind !== 'u8') return !r.alpha
+  for (let i = r.channels - 1; i < r.data.length; i += r.channels) if (r.data[i] !== 255) return false
+  return true
+}
