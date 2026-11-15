@@ -20,6 +20,8 @@ const DDPF_YUV = 0x200
 const DDPF_LUMINANCE = 0x20000
 const DDPF_BUMPDUDV = 0x80000
 const FACE_NAMES = ['+X', '−X', '+Y', '−Y', '+Z', '−Z']
+/** More surfaces than this (array layers × faces × mip levels and slices) is a damaged header. */
+const MAX_IMAGES = 8192
 
 /** How to read one surface. */
 type Layout =
@@ -507,6 +509,15 @@ export function openDds(bytes: Uint8Array): Decoded {
   mips = Math.min(mips, maxMips)
   const depth = volume ? Math.max(1, depthField) : 1
   const sizeAt = (l: number) => ({ w: Math.max(1, width >> l), h: Math.max(1, height >> l), d: Math.max(1, depth >> l) })
+
+  // The array size and depth come straight from the header: count the surfaces before building
+  // anything for them. Each takes at least one byte (a block for BC) of what follows the header.
+  if (bytes.length <= dataStart) throw damaged('DDS data')
+  let slices = 0
+  for (let l = 0; l < mips; l++) slices += sizeAt(l).d
+  const surfaceCount = arraySize * faces.length * slices
+  const minBytes = layout?.kind === 'bc' ? 8 : 1
+  if (surfaceCount > MAX_IMAGES || surfaceCount * minBytes > bytes.length - dataStart) throw damaged('DDS image count')
 
   // Surfaces in file order: per array element and face, every mip (and slice) in turn.
   const total = (pad: boolean) => {

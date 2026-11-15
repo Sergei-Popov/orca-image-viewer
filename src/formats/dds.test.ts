@@ -140,3 +140,23 @@ test('DDS damaged and unsupported: cut off, short header, YUY2', async () => {
   assert.equal(yuy2.desc.images[0].unsupported, 'YUY2')
   await assert.rejects(() => yuy2.decode(0), (e: unknown) => (e as { code?: string }).code === 'unsupported-pixels')
 })
+
+test('DDS damaged headers: array sizes and depths the file cannot hold are rejected before any image is built', async () => {
+  const damagedCount = (e: unknown) => (e as { code?: string; detail?: string }).code === 'damaged' && (e as { detail?: string }).detail === 'DDS image count'
+  // 4×4 RGBA8, a few bytes of data, and an array size from a damaged u32: headers only.
+  for (const arraySize of [30_000_000, 0xffffffff]) {
+    const started = Date.now()
+    await assert.rejects(() => open(dds({ width: 4, height: 4, dxgi: 28, arraySize, data: new Uint8Array(16) })), damagedCount)
+    assert.ok(Date.now() - started < 1000, `arraySize ${arraySize} is rejected at once`)
+  }
+  // A legacy volume texture with depth 0x7fffffff.
+  await assert.rejects(() => open(dds({ width: 4, height: 4, depth: 0x7fffffff, bits: 32, masks: [0xff, 0xff00, 0xff0000, 0xff000000], data: new Uint8Array(64) })), damagedCount)
+  // BC1: each surface needs at least one 8-byte block.
+  const block = bc1Block(rgb565(255, 0, 0), rgb565(255, 0, 0), new Array(16).fill(0))
+  const two = new ByteWriter(true).bytes(block).bytes(block).done()
+  assert.equal((await open(dds({ width: 4, height: 4, dxgi: 71, arraySize: 2, data: two }))).desc.images.length, 2)
+  await assert.rejects(() => open(dds({ width: 4, height: 4, dxgi: 71, arraySize: 3, data: two })), damagedCount)
+  // An absolute cap, even when the bytes would be there: 1×1 R8 with one byte per layer.
+  assert.equal((await open(dds({ width: 1, height: 1, dxgi: 61, arraySize: 8192, data: new Uint8Array(8192) }))).desc.images.length, 8192)
+  await assert.rejects(() => open(dds({ width: 1, height: 1, dxgi: 61, arraySize: 8193, data: new Uint8Array(8193) })), damagedCount)
+})
