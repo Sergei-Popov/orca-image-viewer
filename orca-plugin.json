@@ -1,32 +1,45 @@
 {
   "$schema": "https://raw.githubusercontent.com/stablyai/orca/main/docs/schemas/plugins/orca-plugin.v2.schema.json",
   "manifestVersion": 2,
+  "execution": "sandboxed-ui",
   "id": "image-viewer",
   "name": "Image Viewer",
   "version": "0.1.0",
-  "description": "Images Orca can't open, in its editor tabs: TIFF, HEIC, PSD, EXR, HDR, TGA, DDS, QOI, ICNS and camera RAW, with zoom, pixel values, pages and layers, metadata and Save as PNG. Offline.",
+  "description": "Images Orca cannot show, in its editor tabs: TIFF, HEIC and HEIF, PSD and PSB, OpenEXR, Radiance HDR, TGA, DDS, QOI, ICNS, and the embedded previews of camera RAW files (DNG, CR2, CR3, NEF, ARW, RAF, RW2, ORF, PEF, SRW). Zoom and pan, pixel values, pages, layers, mip levels and sizes, exposure and tone mapping for HDR, EXIF, XMP and GPS details, and Save as PNG. Read-only, offline.",
+  "author": {
+    "name": "Sergei Popov",
+    "url": "https://github.com/Sergei-Popov"
+  },
+  "repository": "https://github.com/Sergei-Popov/orca-image-viewer",
+  "icon": "images/icon.png",
+  "license": "MIT",
   "engines": {
     "orca": ">=1.4.248"
   },
-  "execution": "sandboxed-ui",
   "pluginApi": 1,
   "contributes": {
     "customEditors": [
       {
-        "id": "image-viewer",
+        "id": "image",
         "title": "Image Viewer",
-        "extensions": [
-          ".image-viewer"
-        ],
-        "entry": "editor/main.ts",
-        "frame": "isolated"
+        "extensions": [".tif", ".tiff", ".heic", ".heif", ".hif", ".psd", ".psb", ".exr", ".hdr", ".pic", ".tga", ".dds", ".qoi", ".icns"],
+        "entry": "src/editor.ts",
+        "priority": "default",
+        "contentKind": "bytes",
+        "frame": "isolated",
+        "icon": "icons/image.png"
+      },
+      {
+        "id": "raw",
+        "title": "Image Viewer",
+        "extensions": [".dng", ".cr2", ".cr3", ".nef", ".nrw", ".arw", ".srf", ".raf", ".rw2", ".orf", ".pef", ".srw"],
+        "entry": "src/editor.ts",
+        "priority": "default",
+        "contentKind": "bytes",
+        "frame": "isolated",
+        "icon": "icons/raw.png"
       }
     ]
   },
-  "author": {
-    "name": "Сергей Попов",
-    "url": "https://github.com/Sergei-Popov"
-  },
-  "repository": "https://github.com/Sergei-Popov/orca-image-viewer",
-  "license": "MIT"
+  "capabilities": []
 }
