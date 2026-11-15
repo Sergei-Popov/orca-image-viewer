@@ -804,7 +804,14 @@ export function tiffEntries(tiff: Tiff, max = 2000): TiffEntry[] {
     if (isImageIfd(ifd)) {
       page++
       const reduced = tiff.value(ifd.entries.get(T.NewSubfileType)) & 1
-      out.push({ ifd, label: reduced && page > 1 ? `Page ${page} (reduced)` : `Page ${page}`, page })
+      let name = ''
+      try {
+        name = tiff.string(ifd.entries.get(T.PageName)).trim().slice(0, 80)
+      } catch {
+        // No page name.
+      }
+      const base = reduced && page > 1 ? `Page ${page} (reduced)` : `Page ${page}`
+      out.push({ ifd, label: name ? `${base} · ${name}` : base, page })
     }
     const subs = tiff.values(ifd.entries.get(T.SubIFDs), 64)
     let k = 0

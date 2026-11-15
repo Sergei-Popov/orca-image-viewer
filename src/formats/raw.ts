@@ -353,8 +353,11 @@ export async function openRaw(bytes: Uint8Array, fileType: string | undefined, p
       const w = tiff.value(s.entries.get(T.ImageWidth))
       const h = tiff.value(s.entries.get(T.ImageLength))
       if (w && h) imageItems.push({ key: 'sensor', value: `${w} × ${h}` })
+      // The white level tells the bits the sensor filled (12 or 14 in 16-bit samples).
       const bits = tiff.values(s.entries.get(T.BitsPerSample), 4)
-      if (bits.length) imageItems.push({ key: 'bitDepth', value: `${bits[0]}-bit` })
+      const white = tiff.values(s.entries.get(50717), 4)[0]
+      const used = white > 0 && bits[0] && white < 2 ** bits[0] - 1 ? Math.ceil(Math.log2(white + 1)) : bits[0]
+      if (used) imageItems.push({ key: 'bitDepth', value: `${used}-bit` })
       const c = tiff.value(s.entries.get(T.Compression))
       if (c) imageItems.push({ key: 'compression', value: RAW_COMPRESSION[c] ?? COMPRESSION_NAMES[c] ?? String(c) })
     }

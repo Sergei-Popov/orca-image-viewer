@@ -65,7 +65,7 @@ test('TIFF pages: RGB strips, 16-bit grey LZW with predictor, 4-bit palette Pack
   // Page 1: 4×3 RGB in two strips.
   const rgb = range(36, (i) => (i * 7) & 255)
   const page1 = image({ width: 4, height: 3, spp: 3, photometric: 2, rowsPerStrip: 2, strips: [rgb.subarray(0, 24), rgb.subarray(24)] })
-  page1.entries.push({ tag: 305, text: 'Test writer 1.0' }, { tag: 315, text: 'A. Tester' })
+  page1.entries.push({ tag: 305, text: 'Test writer 1.0' }, { tag: 315, text: 'A. Tester' }, { tag: 285, text: 'Cover' })
   // Page 2: 5×2 16-bit grey, horizontal predictor then LZW.
   const grey = new Uint8Array(20)
   const view = new DataView(grey.buffer)
@@ -89,7 +89,7 @@ test('TIFF pages: RGB strips, 16-bit grey LZW with predictor, 4-bit palette Pack
   assert.equal(d.format, 'TIFF')
   assert.deepEqual(
     d.images.map((i) => i.label),
-    ['Page 1', 'Page 2', 'Page 3']
+    ['Page 1 · Cover', 'Page 2', 'Page 3']
   )
   assert.equal(d.list, 'page')
   assert.equal(item(d, 'file', 'pages'), '3')
