@@ -19,14 +19,16 @@ register them.
   checkerboard, and from 20× a pixel grid shows.
 - **Read pixel values.** The status bar shows the position under the pointer and the pixel's
   values as stored in the file: 8 and 16-bit integers, half and full floats.
-- **Pick what to see.** Pages, sub-images, layers, EXR parts and layers, DDS mip levels, cube
-  faces and array slices, ICNS sizes, RAW previews: a picker in the toolbar and a list in the
-  side pane, each with a thumbnail.
+- **Pick what to see.** Pages, sub-images, layers, EXR parts, layers and MIP levels, DDS cube
+  faces, array layers, MIP levels and volume slices, ICNS sizes, RAW previews and HEIF images each
+  get a picker in the toolbar. The side pane lists the main kind with a thumbnail of each: TIFF
+  pages, PSD layers, EXR parts or layers, DDS cube faces or array layers at the chosen MIP level
+  (or the MIP levels when there is nothing else), ICNS sizes and RAW previews.
 - **Channels.** Colour, red, green, blue, alpha or luminance, alone and in grey.
-- **Exposure and tone.** HDR images (EXR, Radiance HDR, float TIFF and PSD, BC6H and float DDS)
-  get an exposure slider in stops, a tone curve (Clip, Reinhard, Filmic) and **Auto** exposure
-  from the highlights. Integer images get levels and **Auto** contrast. A histogram follows what
-  you see.
+- **Exposure and tone.** Every image gets levels with **Auto** contrast and a reset. HDR images
+  (EXR, Radiance HDR, float TIFF and PSD, BC6H and float DDS) get **Auto** exposure from the
+  highlights instead and a tone curve (Clip, Reinhard, Filmic); they and 16-bit images also get an
+  exposure slider in stops. A histogram follows what you see.
 - **Details.** The side pane lists what the file says about itself: dimensions, bit depth, colour
   model, compression and layout; camera, lens, exposure, focal length, flash and the time taken;
   GPS position, altitude and direction; every EXIF tag; XMP properties (title, keywords, rating,
@@ -144,7 +146,7 @@ orca plugin shot local.image-viewer --editor "$PWD/path/to/image.tif"   # PNG of
 - `src/meta/` — EXIF/TIFF directories, XMP and ICC.
 - `src/viewer/` — the view (`view.ts`), the tiled canvas with zoom and pan (`viewport.ts`) and
   the tone pipeline (`tone.ts`); `src/i18n.ts`, `src/styles.ts`, `src/icons.ts`.
-- `tools/demo/` — generators for the demo images used in the listing: a small ray tracer
+- `tools/demo/` — generators for demo images: a small ray tracer
   (`scene.py`) and scripts that write its render as EXR, HDR, HEIC and DNG (`outputs.py`), a
   layered poster (`poster.py`), DDS textures and a terrain TIFF (`textures.py`), and the DNG and
   PSD containers (`containers.ts`). Everything they draw is made by them; the demo camera is

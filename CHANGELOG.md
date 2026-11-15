@@ -32,8 +32,9 @@ All notable changes to this plugin are documented here. The format follows
   notes for eight makers, the camera name from XMP when the TIFF tags lack it; no RAW development,
   said in a notice.
 - Zoom and pan, Fit and 1:1, checkerboard and pixel grid, pixel values under the pointer, image
-  pickers with thumbnails, channel views, histogram, exposure and tone curves for HDR, levels and
-  auto contrast, keyboard shortcuts.
+  pickers in the toolbar, a side-pane list with thumbnails (TIFF pages, PSD layers, EXR parts,
+  DDS faces and array layers, ICNS sizes, RAW previews), channel views, histogram, levels and Auto
+  contrast for every image, exposure and tone curves for HDR, keyboard shortcuts.
 - Details pane: image and file details, camera and GPS summaries, all EXIF tags, XMP with the raw
   XML, ICC profile, maker notes; values can be copied.
 - Save as PNG through Orca's save dialog, and copy to the clipboard.
