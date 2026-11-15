@@ -834,6 +834,8 @@ export async function openPsd(bytes: Uint8Array, platform: Platform): Promise<De
     }
     const b = [0, 0, 0]
     const s = [0, 0, 0]
+    // A layer that cannot be read, or is cut off, makes the composite partial.
+    let partial = false
     // Bottom to top: the reverse of panel order.
     for (let id = descs.length - 1; id >= 0; id--) {
       const desc = descs[id]
@@ -849,8 +851,10 @@ export async function openPsd(bytes: Uint8Array, platform: Platform): Promise<De
         planes = await layerPlanes(rec)
       } catch (error) {
         if (error instanceof ImageError && error.code === 'too-large') throw error
+        partial = true
         continue
       }
+      if (!planes.complete) partial = true
       const lw = rec.right - rec.left
       const lh = rec.bottom - rec.top
       const layer = toRaster(header, lw, lh, planes.colour, planes.alpha, palette, [])
@@ -924,7 +928,7 @@ export async function openPsd(bytes: Uint8Array, platform: Platform): Promise<De
       }
       out[d + c - 1] = kind === 'f32' ? a : Math.round(clamp(a) * top)
     }
-    return raster(W, H, c, kind, out, { color: grey ? 'gray' : 'rgb', alpha: true, transfer: header.depth === 32 ? 'linear' : 'srgb' })
+    return raster(W, H, c, kind, out, { color: grey ? 'gray' : 'rgb', alpha: true, transfer: header.depth === 32 ? 'linear' : 'srgb', ...(partial ? { partial } : {}) })
   }
 
   // ------------------------------------------------ info
@@ -949,7 +953,7 @@ export async function openPsd(bytes: Uint8Array, platform: Platform): Promise<De
     const compression = (bytes[imageDataAt] << 8) | bytes[imageDataAt + 1]
     imageItems.push({ key: 'compression', value: ['Raw', 'RLE (PackBits)', 'ZIP', 'ZIP with prediction'][compression] ?? String(compression) })
   }
-  imageItems.push({ key: 'composite', value: noComposite ? 'Not saved (composited from layers)' : 'Yes' })
+  imageItems.push({ key: 'composite', value: !hasImageData ? 'Missing, the file is cut off (composited from layers)' : noComposite ? 'Not saved (composited from layers)' : 'Yes' })
   if (resources.resolution) {
     const { h, v, unit } = resources.resolution
     const name = unit === 2 ? 'px/cm' : 'ppi'

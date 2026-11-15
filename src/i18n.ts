@@ -239,6 +239,8 @@ const en = {
     Custom: 'Custom',
     Legacy: 'Legacy',
     'Lossless JPEG': 'Lossless JPEG',
+    'Not saved (composited from layers)': 'Not saved (composited from layers)',
+    'Missing, the file is cut off (composited from layers)': 'Missing, the file is cut off (composited from layers)',
     Packed: 'Packed',
     // Layer kinds and blend modes.
     'Pass through': 'Pass through',
@@ -558,6 +560,8 @@ const ru: Strings = {
     Custom: 'Особая',
     Legacy: 'Старый',
     'Lossless JPEG': 'JPEG без потерь',
+    'Not saved (composited from layers)': 'Не сохранено (собрано из слоёв)',
+    'Missing, the file is cut off (composited from layers)': 'Нет, файл обрезан (собрано из слоёв)',
     Packed: 'Упакованные данные',
     'Pass through': 'Пропустить',
     Dissolve: 'Затухание',

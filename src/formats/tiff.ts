@@ -745,6 +745,8 @@ function resolution(tiff: Tiff, ifd: Ifd): string {
   const y = tiff.value(ifd.entries.get(T.YResolution))
   if (!x) return ''
   const unit = tiff.value(ifd.entries.get(T.ResolutionUnit), 2)
+  // Without a unit the values only give the pixel aspect, which 1:1 makes moot.
+  if (unit === 1 && (!y || Math.abs(y - x) < 0.01)) return ''
   const name = unit === 3 ? 'px/cm' : unit === 1 ? '' : 'dpi'
   const fmt = (v: number) => String(Math.round(v * 100) / 100)
   return `${fmt(x)}${y && Math.abs(y - x) > 0.01 ? ` × ${fmt(y)}` : ''} ${name}`.trim()

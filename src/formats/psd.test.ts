@@ -152,4 +152,25 @@ test('PSD damaged: bad signature, unsupported depth, cut-off image data', async 
   const r = await doc.decode(0)
   assert.ok(r.partial)
   assert.deepEqual(pixel(r, 0, 0), [50, 60, 0])
+
+  // Cut off inside the layers: no saved composite to show, so the readable layers are composited
+  // and the result is marked partial.
+  const red = { [-1]: fill(16, 255), 0: fill(16, 255), 1: fill(16, 0), 2: fill(16, 0) }
+  const layered = psd({
+    width: 4,
+    height: 4,
+    compression: 0,
+    planes: [fill(16, 1), fill(16, 2), fill(16, 3)],
+    realMerged: true,
+    layers: [
+      { name: 'Base', width: 4, height: 4, channels: red },
+      { name: 'Top', width: 4, height: 4, channels: { [-1]: fill(16, 255), 0: fill(16, 0), 1: fill(16, 0), 2: fill(16, 255) } }
+    ]
+  })
+  // The file ends with the composite (2 + 3 × 16 bytes) after a 4-byte global mask length: cut
+  // those and the last 8 bytes of the top layer's blue channel.
+  const cut = await openDocument(layered.subarray(0, layered.length - 50 - 4 - 8), 'psd', platform)
+  assert.equal(item(cut.desc, 'image', 'composite'), 'Missing, the file is cut off (composited from layers)')
+  const shown = await cut.decode(0)
+  assert.ok(shown.partial)
 })
