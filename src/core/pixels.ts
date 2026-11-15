@@ -3,11 +3,14 @@
 
 import { allocate, type Raster, type Samples } from './model'
 
+/** Whether an EXIF orientation swaps width and height: 5–8 do; values outside 1–8 count as 1. */
+export const swapsSides = (orientation: number): boolean => orientation >= 5 && orientation <= 8
+
 /** Applies an EXIF orientation (1–8) by moving pixels; 5–8 swap width and height. */
 export function orient(r: Raster, orientation: number): Raster {
   if (orientation <= 1 || orientation > 8) return r
   const { width: W, height: H, channels: c } = r
-  const swap = orientation >= 5
+  const swap = swapsSides(orientation)
   const w = swap ? H : W
   const h = swap ? W : H
   const src = r.data

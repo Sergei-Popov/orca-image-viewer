@@ -11,7 +11,7 @@ import { checkSize, damaged, ImageError, unsupportedCompression, unsupportedFeat
 import { float24ToFloat, halfTable } from '../core/half'
 import type { Decoded, ImageDesc, InfoItem, InfoSection, Notice, Platform, Raster, SampleKind, Samples } from '../core/model'
 import { allocate, bytesPerSample, joinLabel, raster } from '../core/model'
-import { cmykToRgb, dropAlpha, labToRgb, orient, valueRange } from '../core/pixels'
+import { cmykToRgb, dropAlpha, labToRgb, orient, swapsSides, valueRange } from '../core/pixels'
 import { count as counted } from '../core/plural'
 import { exifDirs, exifDate, exifSummary, ORIENTATION_NAMES } from '../meta/exif'
 import { iccItems, readIcc } from '../meta/icc'
@@ -865,7 +865,7 @@ export async function openTiff(bytes: Uint8Array, platform: Platform): Promise<D
       unsupported = error instanceof ImageError ? error.detail || error.code : 'damaged'
     }
     layouts.push(im)
-    const swap = im && im.orientation >= 5
+    const swap = im && swapsSides(im.orientation)
     images.push({
       id: i,
       width: im ? (swap ? im.height : im.width) : 0,

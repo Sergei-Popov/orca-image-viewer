@@ -61,6 +61,17 @@ function image(s: Spec): TiffIfd {
 
 const range = (n: number, f: (i: number) => number) => Uint8Array.from({ length: n }, (_, i) => f(i))
 
+test('TIFF malformed Orientation: values outside 1–8 count as 1, so the described size is the raster size', async () => {
+  const oriented = (orientation: number) =>
+    image({ width: 3, height: 2, photometric: 1, strips: [Uint8Array.of(1, 2, 3, 4, 5, 6)], extra: [{ tag: 274, type: 3, values: [orientation] }] })
+  for (const [orientation, size] of [[9, [3, 2]], [0xffff, [3, 2]], [6, [2, 3]]] as const) {
+    const doc = await openDocument(tiff([oriented(orientation)]), 'tif', platform)
+    const r = await doc.decode(0)
+    assert.deepEqual([doc.desc.images[0].width, doc.desc.images[0].height], size, `orientation ${orientation}`)
+    assert.deepEqual([r.width, r.height], size, `orientation ${orientation} raster`)
+  }
+})
+
 test('TIFF page names in Russian: a page named like a decoder word stays as the file has it', async () => {
   const { imageText, stringsFor } = await import('../i18n')
   const ru = stringsFor('ru')

@@ -292,6 +292,11 @@ test('Overview: boxes stay inside the image when one side is shorter than the fa
   const o = overview(tall, 10)
   assert.deepEqual([o.raster.width, o.raster.height], [1, 10])
   assert.deepEqual(Array.from(o.raster.data), [0, 0, 0, 0, 0, 1, 1, 1, 1, 1])
+  // Its scale is the coarser axis' (rows were averaged 100 to 1), so zooming in brings full-size
+  // tiles instead of the averaged overview; the same for a 1-row strip.
+  assert.equal(o.scale, 0.01)
+  assert.equal(overview(raster(4096, 1, 1, 'u8', new Uint8Array(4096)), 2048).scale, 0.5)
+  assert.equal(overview(raster(1, 4096, 1, 'u8', new Uint8Array(4096)), 2048).scale, 0.5)
   // A million-row strip finishes in about the time of its pixel count, not factor² per pixel.
   const strip = raster(1, 1 << 20, 1, 'u8', new Uint8Array(1 << 20).fill(9))
   const started = Date.now()

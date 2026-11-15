@@ -8,7 +8,7 @@ import { hex, latin1, startsWith } from '../core/bytes'
 import { ImageError, unsupportedFeature } from '../core/errors'
 import type { Decoded, ImageDesc, InfoItem, InfoSection, Platform, Raster } from '../core/model'
 import { raster } from '../core/model'
-import { dropAlpha, orient } from '../core/pixels'
+import { dropAlpha, orient, swapsSides } from '../core/pixels'
 import { type CameraExtras, cameraExtrasFromBlock, exifDirs, exifFromBlock, exifSummary, type ExifSummary, fillExtras, genericValue } from '../meta/exif'
 import { type Ifd, T, Tiff } from '../meta/ifd'
 import { cameraExtrasFromXmp, xmpProperties, xmpSection } from '../meta/xmp'
@@ -452,7 +452,7 @@ export async function openRaw(bytes: Uint8Array, fileType: string | undefined, p
 
   const images: ImageDesc[] = list.map((p, id) => {
     let { w, h } = sizeOf(p)
-    if ((p.shown ?? 1) >= 5) [w, h] = [h, w]
+    if (swapsSides(p.shown ?? 1)) [w, h] = [h, w]
     const role = id === 0 ? 'Largest preview' : w * h <= 320 * 240 ? 'Thumbnail' : 'Preview'
     return {
       id,
