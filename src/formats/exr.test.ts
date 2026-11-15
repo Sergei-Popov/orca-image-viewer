@@ -63,6 +63,31 @@ for (const [compression, name] of [
   })
 }
 
+test('EXR B44A with perceptually linear (pLinear) channels: stored as exp(v / 8), shown as v', async () => {
+  // One value per 4×4 block; the edge blocks of the 10 × 9 image are partial.
+  const block = (x: number, y: number) => (x >> 2) + 3 * (y >> 2)
+  const values = [(x: number, y: number) => block(x, y) - 3.5, (x: number, y: number) => 0.25 * (block(x, y) + 1), () => 0.5]
+  const file = await exr({
+    width: 10,
+    height: 9,
+    channels: [{ name: 'R', pLinear: true }, { name: 'G' }, { name: 'B', pLinear: true }],
+    value: (c, x, y) => values[c](x, y),
+    compression: 7
+  })
+  const doc = await openDocument(file, 'exr', platform)
+  const r = await doc.decode(doc.desc.primary)
+  for (let y = 0; y < 9; y++) {
+    for (let x = 0; x < 10; x++) {
+      for (let c = 0; c < 3; c++) {
+        const want = values[c](x, y)
+        const got = sample(r, x, y, c)
+        // exp(v / 8) is stored as a half, so the value comes back within 8 × 2⁻¹¹.
+        assert.ok(Math.abs(got - want) <= 0.004, `(${x}, ${y}) channel ${c}: ${got} ≠ ${want}`)
+      }
+    }
+  }
+})
+
 test('EXR float and uint channels: float stays exact, uint is data', async () => {
   const doc = await openDocument(
     await exr({

@@ -612,7 +612,8 @@ async function decompressBlock(part: Part, data: Uint8Array, ax0: number, ay0: n
   const chans: BlockChannel[] = part.channels.map((ch) => ({
     nx: numSamples(ch.xs, ax0, ax0 + bw - 1),
     ny: numSamples(ch.ys, ay0, ay0 + bh - 1),
-    type: ch.type
+    type: ch.type,
+    pLinear: ch.pLinear
   }))
   const expected = chans.reduce((s, ch) => s + ch.nx * ch.ny * PIXEL_SIZE[ch.type], 0)
   if (data.length >= expected || part.compression === 0) {
